@@ -1,6 +1,8 @@
 import { Router, type IRouter } from "express";
 import { randomUUID } from "node:crypto";
 import {
+  ApplyAgendaImportBody,
+  ApplyAgendaImportParams,
   AgendaImportInput,
   CreateAgendaItemBody,
   CreateAgendaItemParams,
@@ -80,14 +82,14 @@ function sessionPayload(session: typeof liveSessionsTable.$inferSelect) {
   let elapsedSeconds = session.elapsedSeconds;
   let state = session.state;
 
-  if (session.state === "running" && session.lastCommandAt) {
+  if ((session.state === "running" || session.state === "overtime") && session.lastCommandAt) {
     const tick = Math.max(
       0,
       Math.floor((Date.now() - session.lastCommandAt.getTime()) / 1000),
     );
     remainingSeconds -= tick;
     elapsedSeconds += tick;
-    if (remainingSeconds <= 0) state = "overtime";
+    state = remainingSeconds <= 0 ? "overtime" : "running";
   }
 
   return {
@@ -105,7 +107,7 @@ function sessionPayload(session: typeof liveSessionsTable.$inferSelect) {
 }
 
 async function persistTick(session: typeof liveSessionsTable.$inferSelect) {
-  if (session.state !== "running" || !session.lastCommandAt) return session;
+  if ((session.state !== "running" && session.state !== "overtime") || !session.lastCommandAt) return session;
   const tick = Math.max(
     0,
     Math.floor((Date.now() - session.lastCommandAt.getTime()) / 1000),
@@ -114,7 +116,7 @@ async function persistTick(session: typeof liveSessionsTable.$inferSelect) {
   const next = {
     remainingSeconds: session.remainingSeconds - tick,
     elapsedSeconds: session.elapsedSeconds + tick,
-    state: session.remainingSeconds - tick <= 0 ? "overtime" : session.state,
+    state: session.remainingSeconds - tick <= 0 ? "overtime" : "running",
     lastCommandAt: new Date(),
   };
   const [updated] = await db
@@ -238,6 +240,16 @@ router.post("/events", async (req, res) => {
       })
       .returning();
     await ensureSession(event.id);
+    await db.insert(displaysTable).values({
+      id: id(),
+      eventId: event.id,
+      name: "Speaker confidence monitor",
+      kind: "speaker",
+      connectionStatus: "online",
+      assignedLayout: "focus",
+      lastSeenAt: new Date(),
+      currentContent: "Ready to receive live timing",
+    });
     res.status(201).json(await eventPayload(event));
   } catch (error) {
     req.log.error({ error }, "Failed to create event");
@@ -339,20 +351,24 @@ router.post("/events/:eventId/agenda/import-preview", async (req, res) => {
   const source = body.source.trim();
   const rows = source.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   const items = rows.map((row) => {
-    const parts = row.includes(",") ? row.split(",").map((part) => part.trim()) : [row];
-    const title = parts[0] || "Untitled segment";
-    const durationMatch = row.match(/(\d+)\s*(?:min|minutes?)/i);
+    const startMatch = row.match(/^(\d{1,2}):(\d{2})\b/);
+    const durationMatch = row.match(/(\d+)\s*(?:m|min|minutes?)\b/i);
     const rangeMatch = row.match(/\b(\d{1,2}):(\d{2})\s*[-–]\s*(\d{1,2}):(\d{2})\b/);
     const plannedDurationMinutes = durationMatch
       ? Number(durationMatch[1])
       : rangeMatch
         ? (Number(rangeMatch[3]) * 60 + Number(rangeMatch[4]) - (Number(rangeMatch[1]) * 60 + Number(rangeMatch[2])) + 1440) % 1440
         : 10;
+    const withoutStart = row.replace(/^\d{1,2}:\d{2}\s*(?:[-–]\s*\d{1,2}:\d{2})?\s*/, "");
+    const withoutDuration = withoutStart.replace(/\s*\d+\s*(?:m|min|minutes?)\s*$/i, "").trim();
+    const parts = withoutDuration.includes(",")
+      ? withoutDuration.split(",").map((part) => part.trim()).filter(Boolean)
+      : withoutDuration.split(/\t+|\s{2,}/).map((part) => part.trim()).filter(Boolean);
     return {
-      title,
+      title: parts[0] || "Untitled segment",
       type: "custom" as const,
       speaker: parts[1] || null,
-      plannedStart: rangeMatch ? `${rangeMatch[1].padStart(2, "0")}:${rangeMatch[2]}` : null,
+      plannedStart: startMatch ? `${startMatch[1].padStart(2, "0")}:${startMatch[2]}` : null,
       plannedDurationMinutes: Math.max(1, plannedDurationMinutes),
       warningMinutes: 2,
       notes: null,
@@ -364,14 +380,48 @@ router.post("/events/:eventId/agenda/import-preview", async (req, res) => {
       "Preview only: nothing has been added to the event yet.",
       `Parsed ${items.length} ${items.length === 1 ? "segment" : "segments"} from the provided ${body.format ?? "text"}.`,
     ],
-    confidence: rows.some((row) => /\d{1,2}:\d{2}/.test(row)) ? "medium" : "low",
+    confidence: rows.every((row) => /^\d{1,2}:\d{2}\b/.test(row) && /(\d+)\s*(?:m|min|minutes?)\b/i.test(row)) ? "high" : rows.some((row) => /\d{1,2}:\d{2}/.test(row)) ? "medium" : "low",
   });
   req.log.info({ eventId: params.eventId, itemCount: items.length }, "Previewed agenda import");
+});
+
+router.post("/events/:eventId/agenda/import", async (req, res) => {
+  const params = ApplyAgendaImportParams.parse(req.params);
+  const body = ApplyAgendaImportBody.parse(req.body);
+  const [event] = await db.select({ id: eventsTable.id }).from(eventsTable).where(eq(eventsTable.id, params.eventId)).limit(1);
+  if (!event) return res.status(404).json({ error: "Event not found" });
+
+  const imported = await db.transaction(async (tx) => {
+    const [last] = await tx
+      .select({ position: agendaItemsTable.position })
+      .from(agendaItemsTable)
+      .where(eq(agendaItemsTable.eventId, params.eventId))
+      .orderBy(desc(agendaItemsTable.position))
+      .limit(1);
+    const firstPosition = (last?.position ?? 0) + 1;
+    const values = body.items.map((item, index) => ({
+      id: id(),
+      eventId: params.eventId,
+      position: firstPosition + index,
+      title: item.title,
+      type: item.type,
+      speaker: item.speaker ?? null,
+      plannedStart: item.plannedStart ?? null,
+      plannedDurationMinutes: item.plannedDurationMinutes,
+      warningMinutes: item.warningMinutes ?? 2,
+      notes: item.notes ?? null,
+    }));
+    return tx.insert(agendaItemsTable).values(values).returning();
+  });
+  return res.status(201).json(imported.map(agendaPayload));
 });
 
 router.patch("/agenda/:itemId", async (req, res) => {
   const params = UpdateAgendaItemParams.parse(req.params);
   const body = UpdateAgendaItemBody.parse(req.body);
+  if (body.status === "active") {
+    return res.status(409).json({ error: "Use a live-session jump command to activate a segment" });
+  }
   const [item] = await db
     .update(agendaItemsTable)
     .set(body)
@@ -494,21 +544,41 @@ router.post("/events/:eventId/session", async (req, res) => {
     }
   }
 
-  const [updated] = await db
-    .update(liveSessionsTable)
-    .set(nextValues)
-    .where(eq(liveSessionsTable.eventId, params.eventId))
-    .returning();
+  const updated = await db.transaction(async (tx) => {
+    const [nextSession] = await tx
+      .update(liveSessionsTable)
+      .set(nextValues)
+      .where(eq(liveSessionsTable.eventId, params.eventId))
+      .returning();
 
-  if (body.action === "start" || body.action === "resume" || body.action === "restart") {
-    await db.update(eventsTable).set({ status: "live", updatedAt: new Date() }).where(eq(eventsTable.id, params.eventId));
-    if (updated.activeItemId) {
-      await db
+    const isNavigation = body.action === "next" || body.action === "previous" || body.action === "jump";
+    const isStarting = body.action === "start" || body.action === "resume" || body.action === "restart";
+    if (isNavigation || isStarting) {
+      await tx
         .update(agendaItemsTable)
-        .set({ status: "active", actualStartedAt: new Date() })
-        .where(eq(agendaItemsTable.id, updated.activeItemId));
+        .set({ status: "queued" })
+        .where(and(eq(agendaItemsTable.eventId, params.eventId), eq(agendaItemsTable.status, "active")));
     }
-  }
+    if (isNavigation && body.action === "next" && session.activeItemId && session.activeItemId !== nextSession.activeItemId) {
+      await tx
+        .update(agendaItemsTable)
+        .set({ status: "complete", actualEndedAt: new Date() })
+        .where(eq(agendaItemsTable.id, session.activeItemId));
+    }
+    if (nextSession.activeItemId && (isNavigation || isStarting)) {
+      await tx
+        .update(agendaItemsTable)
+        .set({
+          status: "active",
+          ...(isStarting ? { actualStartedAt: new Date(), actualEndedAt: null } : {}),
+        })
+        .where(eq(agendaItemsTable.id, nextSession.activeItemId));
+    }
+    if (isStarting) {
+      await tx.update(eventsTable).set({ status: "live", updatedAt: new Date() }).where(eq(eventsTable.id, params.eventId));
+    }
+    return nextSession;
+  });
   res.json(sessionPayload(updated));
 });
 

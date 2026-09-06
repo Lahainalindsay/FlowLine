@@ -1,6 +1,6 @@
-# [Project name]
+# Flowline
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Flowline is a live event timing platform for planning a run of show, operating a server-authoritative timer, and synchronizing speaker or stage displays.
 
 ## Run & Operate
 
@@ -22,23 +22,40 @@ _Replace the heading above with the project's name, and this line with one sente
 
 ## Where things live
 
-_Populate as you build — short repo map plus pointers to the source-of-truth file for DB schema, API contracts, theme files, etc._
+- `artifacts/flowline/` — React/Vite operator workspace and presentation display
+- `artifacts/api-server/src/routes/flowline.ts` — Flowline HTTP API implementation
+- `lib/api-spec/openapi.yaml` — source-of-truth API contract
+- `lib/api-client-react/` and `lib/api-zod/` — generated clients and validation schemas
+- `lib/db/src/schema/events.ts` — event, agenda, display, and live-session persistence
+- `artifacts/api-server/src/lib/seed.ts` — example Horizon Summit workspace data
 
 ## Architecture decisions
 
-_Populate as you build — non-obvious choices a reader couldn't infer from the code (3-5 bullets)._
+- The server owns timer state. Clients render local one-second ticks between authoritative refreshes.
+- Overtime remains an advancing state and can be paused, resumed, reset, or moved to the next segment.
+- Agenda imports are previewed first and applied in one database transaction to prevent partial or scrambled schedules.
+- Live-session transitions update agenda status in the same transaction so operator and display views agree.
+- Authentication is intentionally not enabled until an external identity provider is approved; do not add homegrown password storage.
 
 ## Product
 
-_Describe the high-level user-facing capabilities of this app once they exist._
+- Create persistent events with venue, date, and timezone.
+- Build, reorder, update, delete, or import a run of show.
+- Start, pause, resume, reset, extend, and advance a live event timer.
+- Send operator messages and production cues to registered presentation displays.
+- Use responsive operator controls on desktop or mobile.
+- Open display-specific speaker/stage presentation links with synchronized timing.
 
 ## User preferences
 
-_Populate as you build — explicit user instructions worth remembering across sessions._
+- Keep Flowline original; do not copy StageTimer branding, design, copy, or trade dress.
 
 ## Gotchas
 
-_Populate as you build — sharp edges, "always run X before Y" rules._
+- Run API code generation after every OpenAPI change, before typechecking callers.
+- Do not write agenda imports as concurrent single-row requests; use the atomic import endpoint.
+- A session can be `overtime` while its clock is still advancing.
+- Auth routes are visual placeholders until the user approves an identity-provider integration.
 
 ## Pointers
 

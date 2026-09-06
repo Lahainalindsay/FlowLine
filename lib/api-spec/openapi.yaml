@@ -190,6 +190,28 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AgendaImportPreview"
+  /events/{eventId}/agenda/import:
+    parameters:
+      - $ref: "#/components/parameters/EventId"
+    post:
+      operationId: applyAgendaImport
+      tags: [agenda]
+      summary: Atomically add a reviewed agenda import
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AgendaImportApplyInput"
+      responses:
+        "201":
+          description: Imported agenda items
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgendaItem"
   /agenda/{itemId}:
     parameters:
       - $ref: "#/components/parameters/AgendaItemId"
@@ -482,6 +504,15 @@ components:
           type: array
           items: { type: string }
         confidence: { type: string, enum: [high, medium, low] }
+    AgendaImportApplyInput:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          minItems: 1
+          maxItems: 250
+          items: { $ref: "#/components/schemas/AgendaItemInput" }
     Display:
       type: object
       required: [id, eventId, name, kind, connectionStatus, assignedLayout, currentContent]

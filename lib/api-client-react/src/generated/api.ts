@@ -20,6 +20,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AgendaImportApplyInput,
   AgendaImportInput,
   AgendaImportPreview,
   AgendaItem,
@@ -884,6 +885,78 @@ export const usePreviewAgendaImport = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getPreviewAgendaImportMutationOptions(options));
+    }
+
+export const getApplyAgendaImportUrl = (eventId: string,) => {
+
+
+
+
+  return `/api/events/${eventId}/agenda/import`
+}
+
+/**
+ * @summary Atomically add a reviewed agenda import
+ */
+export const applyAgendaImport = async (eventId: string,
+    agendaImportApplyInput: AgendaImportApplyInput, options?: Parameters<typeof customFetch>[1]): Promise<AgendaItem[]> => {
+
+  return customFetch<AgendaItem[]>(getApplyAgendaImportUrl(eventId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(agendaImportApplyInput)
+  }
+);}
+
+
+
+
+
+export const getApplyAgendaImportMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyAgendaImport>>, TError,{eventId: string;data: BodyType<AgendaImportApplyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof applyAgendaImport>>, TError,{eventId: string;data: BodyType<AgendaImportApplyInput>}, TContext> => {
+
+const mutationKey = ['applyAgendaImport'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof applyAgendaImport>>, {eventId: string;data: BodyType<AgendaImportApplyInput>}> = (props) => {
+          const {eventId,data} = props ?? {};
+
+          return  applyAgendaImport(eventId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ApplyAgendaImportMutationResult = NonNullable<Awaited<ReturnType<typeof applyAgendaImport>>>
+    export type ApplyAgendaImportMutationBody = BodyType<AgendaImportApplyInput>
+    export type ApplyAgendaImportMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Atomically add a reviewed agenda import
+ */
+export const useApplyAgendaImport = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof applyAgendaImport>>, TError,{eventId: string;data: BodyType<AgendaImportApplyInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof applyAgendaImport>>,
+        TError,
+        {eventId: string;data: BodyType<AgendaImportApplyInput>},
+        TContext
+      > => {
+      return useMutation(getApplyAgendaImportMutationOptions(options));
     }
 
 export const getUpdateAgendaItemUrl = (itemId: string,) => {

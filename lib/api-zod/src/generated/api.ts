@@ -386,6 +386,51 @@ export const PreviewAgendaImportResponse = zod.object({
 
 
 /**
+ * @summary Atomically add a reviewed agenda import
+ */
+export const ApplyAgendaImportParams = zod.object({
+  "eventId": zod.coerce.string()
+})
+
+
+
+export const applyAgendaImportBodyItemsItemWarningMinutesMin = 0;
+
+export const applyAgendaImportBodyItemsMax = 250;
+
+
+
+export const ApplyAgendaImportBody = zod.object({
+  "items": zod.array(zod.object({
+  "title": zod.string().min(1),
+  "type": zod.enum(['opening', 'keynote', 'panel', 'break', 'transition', 'video', 'performance', 'qa', 'closing', 'custom']),
+  "speaker": zod.string().nullish(),
+  "plannedStart": zod.string().nullish(),
+  "plannedDurationMinutes": zod.int().min(1),
+  "warningMinutes": zod.int().min(applyAgendaImportBodyItemsItemWarningMinutesMin).optional(),
+  "notes": zod.string().nullish()
+})).min(1).max(applyAgendaImportBodyItemsMax)
+})
+
+export const ApplyAgendaImportResponseItem = zod.object({
+  "id": zod.string(),
+  "eventId": zod.string(),
+  "position": zod.int(),
+  "title": zod.string(),
+  "type": zod.enum(['opening', 'keynote', 'panel', 'break', 'transition', 'video', 'performance', 'qa', 'closing', 'custom']),
+  "speaker": zod.string().nullish(),
+  "plannedStart": zod.string().nullish(),
+  "plannedDurationMinutes": zod.int(),
+  "warningMinutes": zod.int(),
+  "notes": zod.string().nullish(),
+  "status": zod.enum(['queued', 'active', 'complete', 'skipped']),
+  "actualStartedAt": zod.string().nullish(),
+  "actualEndedAt": zod.string().nullish()
+})
+export const ApplyAgendaImportResponse = zod.array(ApplyAgendaImportResponseItem)
+
+
+/**
  * @summary Update an agenda item
  */
 export const UpdateAgendaItemParams = zod.object({

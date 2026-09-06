@@ -292,6 +292,14 @@ export interface AgendaImportPreview {
   confidence: AgendaImportPreviewConfidence;
 }
 
+export interface AgendaImportApplyInput {
+  /**
+     * @minItems 1
+     * @maxItems 250
+     */
+  items: AgendaItemInput[];
+}
+
 export type DisplayInputKind = typeof DisplayInputKind[keyof typeof DisplayInputKind];
 
 

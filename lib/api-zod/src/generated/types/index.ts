@@ -8,6 +8,7 @@
 
 export * from './activity';
 export * from './activityTone';
+export * from './agendaImportApplyInput';
 export * from './agendaImportInput';
 export * from './agendaImportInputFormat';
 export * from './agendaImportPreview';
