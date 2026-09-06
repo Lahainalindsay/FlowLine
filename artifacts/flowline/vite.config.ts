@@ -30,6 +30,19 @@ if (!basePath) {
 export default defineConfig({
   base: basePath,
   plugins: [
+    {
+      name: 'flowline-entry',
+      transformIndexHtml: {
+        order: 'pre',
+        handler: () => [
+          {
+            tag: 'script',
+            attrs: { type: 'module', src: '/src/main.tsx' },
+            injectTo: 'body',
+          },
+        ],
+      },
+    },
     react(),
     tailwindcss({ optimize: false }),
     runtimeErrorOverlay(),
