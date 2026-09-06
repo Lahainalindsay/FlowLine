@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Flowline"
+description = "A real-time live event timing platform for producers, speakers, backstage teams, and presenters. Build a run of show, control live sessions, and synchronize every display from one calm operator console."
+version = "1.0.0"
+id = "artifacts/flowline"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 19607
+
+[services.development]
+run = "pnpm --filter @workspace/flowline run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/flowline", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/flowline/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "19607"
+BASE_PATH = "/"
