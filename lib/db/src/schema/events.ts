@@ -4,6 +4,7 @@ import { z } from "zod/v4";
 
 export const eventsTable = pgTable("flowline_events", {
   id: text("id").primaryKey(),
+  ownerUserId: text("owner_user_id"),
   name: text("name").notNull(),
   date: date("date", { mode: "string" }).notNull(),
   venue: text("venue"),
@@ -11,6 +12,17 @@ export const eventsTable = pgTable("flowline_events", {
   status: text("status").notNull().default("draft"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+});
+
+export const displayAccessTable = pgTable("flowline_display_access", {
+  id: text("id").primaryKey(),
+  eventId: text("event_id").notNull(),
+  displayId: text("display_id").notNull(),
+  codeHash: text("code_hash").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
 });
 
 export const agendaItemsTable = pgTable("flowline_agenda_items", {
@@ -60,9 +72,11 @@ export const insertEventSchema = createInsertSchema(eventsTable).omit({
 export const insertAgendaItemSchema = createInsertSchema(agendaItemsTable);
 export const insertDisplaySchema = createInsertSchema(displaysTable);
 export const insertLiveSessionSchema = createInsertSchema(liveSessionsTable);
+export const insertDisplayAccessSchema = createInsertSchema(displayAccessTable);
 
 export type InsertEvent = z.infer<typeof insertEventSchema>;
 export type Event = typeof eventsTable.$inferSelect;
 export type AgendaItem = typeof agendaItemsTable.$inferSelect;
 export type Display = typeof displaysTable.$inferSelect;
 export type LiveSession = typeof liveSessionsTable.$inferSelect;
+export type DisplayAccess = typeof displayAccessTable.$inferSelect;

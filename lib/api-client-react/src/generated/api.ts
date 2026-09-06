@@ -30,7 +30,11 @@ import type {
   CueInput,
   DashboardSummary,
   Display,
+  DisplayAccess,
+  DisplayAccessInput,
+  DisplayCodeInput,
   DisplayInput,
+  DisplayToken,
   Event,
   EventDetail,
   EventInput,
@@ -40,6 +44,7 @@ import type {
   NotFoundResponse,
   OperatorMessage,
   OperatorMessageInput,
+  PublicDisplayState,
   ReorderAgendaInput,
   SessionControl
 } from './api.schemas';
@@ -1613,5 +1618,296 @@ export const useTriggerCue = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getTriggerCueMutationOptions(options));
+    }
+
+export const getCreateDisplayAccessUrl = (eventId: string,) => {
+
+
+
+
+  return `/api/events/${eventId}/display-access`
+}
+
+/**
+ * @summary Create a revocable guest display code
+ */
+export const createDisplayAccess = async (eventId: string,
+    displayAccessInput: DisplayAccessInput, options?: Parameters<typeof customFetch>[1]): Promise<DisplayAccess> => {
+
+  return customFetch<DisplayAccess>(getCreateDisplayAccessUrl(eventId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(displayAccessInput)
+  }
+);}
+
+
+
+
+
+export const getCreateDisplayAccessMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDisplayAccess>>, TError,{eventId: string;data: BodyType<DisplayAccessInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof createDisplayAccess>>, TError,{eventId: string;data: BodyType<DisplayAccessInput>}, TContext> => {
+
+const mutationKey = ['createDisplayAccess'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof createDisplayAccess>>, {eventId: string;data: BodyType<DisplayAccessInput>}> = (props) => {
+          const {eventId,data} = props ?? {};
+
+          return  createDisplayAccess(eventId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type CreateDisplayAccessMutationResult = NonNullable<Awaited<ReturnType<typeof createDisplayAccess>>>
+    export type CreateDisplayAccessMutationBody = BodyType<DisplayAccessInput>
+    export type CreateDisplayAccessMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Create a revocable guest display code
+ */
+export const useCreateDisplayAccess = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof createDisplayAccess>>, TError,{eventId: string;data: BodyType<DisplayAccessInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof createDisplayAccess>>,
+        TError,
+        {eventId: string;data: BodyType<DisplayAccessInput>},
+        TContext
+      > => {
+      return useMutation(getCreateDisplayAccessMutationOptions(options));
+    }
+
+export const getResolveDisplayCodeUrl = () => {
+
+
+
+
+  return `/api/display-access/resolve`
+}
+
+/**
+ * @summary Exchange a guest code for a display token
+ */
+export const resolveDisplayCode = async (displayCodeInput: DisplayCodeInput, options?: Parameters<typeof customFetch>[1]): Promise<DisplayToken> => {
+
+  return customFetch<DisplayToken>(getResolveDisplayCodeUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(displayCodeInput)
+  }
+);}
+
+
+
+
+
+export const getResolveDisplayCodeMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveDisplayCode>>, TError,{data: BodyType<DisplayCodeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof resolveDisplayCode>>, TError,{data: BodyType<DisplayCodeInput>}, TContext> => {
+
+const mutationKey = ['resolveDisplayCode'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof resolveDisplayCode>>, {data: BodyType<DisplayCodeInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  resolveDisplayCode(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type ResolveDisplayCodeMutationResult = NonNullable<Awaited<ReturnType<typeof resolveDisplayCode>>>
+    export type ResolveDisplayCodeMutationBody = BodyType<DisplayCodeInput>
+    export type ResolveDisplayCodeMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Exchange a guest code for a display token
+ */
+export const useResolveDisplayCode = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveDisplayCode>>, TError,{data: BodyType<DisplayCodeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof resolveDisplayCode>>,
+        TError,
+        {data: BodyType<DisplayCodeInput>},
+        TContext
+      > => {
+      return useMutation(getResolveDisplayCodeMutationOptions(options));
+    }
+
+export const getGetPublicDisplayStateUrl = (token: string,) => {
+
+
+
+
+  return `/api/display-access/${token}`
+}
+
+/**
+ * @summary Get read-only timer state using a guest token
+ */
+export const getPublicDisplayState = async (token: string, options?: Parameters<typeof customFetch>[1]): Promise<PublicDisplayState> => {
+
+  return customFetch<PublicDisplayState>(getGetPublicDisplayStateUrl(token),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetPublicDisplayStateQueryKey = (token: string,) => {
+    return [
+    `/api/display-access/${token}`
+    ] as const;
+    }
+
+
+export const getGetPublicDisplayStateQueryOptions = <TData = Awaited<ReturnType<typeof getPublicDisplayState>>, TError = ErrorType<unknown>>(token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicDisplayState>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetPublicDisplayStateQueryKey(token);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getPublicDisplayState>>> = ({ signal }) => getPublicDisplayState(token, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: token !== null && token !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getPublicDisplayState>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetPublicDisplayStateQueryResult = NonNullable<Awaited<ReturnType<typeof getPublicDisplayState>>>
+export type GetPublicDisplayStateQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Get read-only timer state using a guest token
+ */
+
+export function useGetPublicDisplayState<TData = Awaited<ReturnType<typeof getPublicDisplayState>>, TError = ErrorType<unknown>>(
+ token: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getPublicDisplayState>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetPublicDisplayStateQueryOptions(token,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getRevokeDisplayAccessUrl = (accessId: string,) => {
+
+
+
+
+  return `/api/display-access/${accessId}/revoke`
+}
+
+/**
+ * @summary Revoke guest display access
+ */
+export const revokeDisplayAccess = async (accessId: string, options?: Parameters<typeof customFetch>[1]): Promise<void> => {
+
+  return customFetch<void>(getRevokeDisplayAccessUrl(accessId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRevokeDisplayAccessMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeDisplayAccess>>, TError,{accessId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof revokeDisplayAccess>>, TError,{accessId: string}, TContext> => {
+
+const mutationKey = ['revokeDisplayAccess'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof revokeDisplayAccess>>, {accessId: string}> = (props) => {
+          const {accessId} = props ?? {};
+
+          return  revokeDisplayAccess(accessId,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RevokeDisplayAccessMutationResult = NonNullable<Awaited<ReturnType<typeof revokeDisplayAccess>>>
+
+    export type RevokeDisplayAccessMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Revoke guest display access
+ */
+export const useRevokeDisplayAccess = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof revokeDisplayAccess>>, TError,{accessId: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof revokeDisplayAccess>>,
+        TError,
+        {accessId: string},
+        TContext
+      > => {
+      return useMutation(getRevokeDisplayAccessMutationOptions(options));
     }
 

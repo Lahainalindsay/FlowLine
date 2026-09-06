@@ -317,6 +317,48 @@ export interface DisplayInput {
   assignedLayout?: string;
 }
 
+export interface DisplayAccessInput {
+  displayId: string;
+  /**
+     * @minimum 5
+     * @maximum 10080
+     */
+  expiresInMinutes?: number;
+}
+
+export interface DisplayAccess {
+  id: string;
+  eventId: string;
+  displayId: string;
+  code: string;
+  token: string;
+  expiresAt: string;
+}
+
+export interface DisplayCodeInput {
+  /**
+     * @minLength 6
+     * @maxLength 8
+     */
+  code: string;
+}
+
+export interface DisplayToken {
+  token: string;
+}
+
+export interface PublicDisplayEvent {
+  name: string;
+  timezone: string;
+}
+
+export interface PublicDisplayState {
+  event: PublicDisplayEvent;
+  display: Display;
+  agenda: AgendaItem[];
+  session: LiveSession;
+}
+
 export type SessionControlAction = typeof SessionControlAction[keyof typeof SessionControlAction];
 
 

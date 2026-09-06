@@ -1,24 +1,66 @@
-import { type FormEvent, type ReactNode, useEffect, useState } from 'react';
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
+import { ClerkProvider, SignIn, SignUp, useAuth, useClerk, useUser } from '@clerk/react';
+import { publishableKeyFromHost } from '@clerk/react/internal';
+import { shadcn } from '@clerk/themes';
+import QRCode from 'react-qr-code';
 import {
   ArrowLeft, ArrowRight, CalendarDays, Check, CircleHelp, Clock3, Monitor as DisplayIcon,
   FileUp, GripVertical, LayoutDashboard, ListChecks, Loader2, LogOut, Menu,
-  Pause, Play, Plus, RefreshCw, RotateCcw, Settings, Signal, Trash2, TriangleAlert, Users, X, Zap,
+  Pause, Play, Plus, QrCode, RefreshCw, RotateCcw, Settings, Signal, Trash2, TriangleAlert, Users, X, Zap,
 } from 'lucide-react';
 import {
   getGetDashboardSummaryQueryKey, getGetEventQueryKey, getGetLiveSessionQueryKey, getListAgendaItemsQueryKey,
   getListDisplaysQueryKey, getListEventsQueryKey, useApplyAgendaImport, useControlLiveSession, useCreateAgendaItem,
   useCreateEvent, useDeleteAgendaItem, useGetDashboardSummary, useGetEvent, useGetLiveSession,
-  useListAgendaItems, useListDisplays, usePreviewAgendaImport, useReorderAgendaItems, useSendOperatorMessage,
+  useCreateDisplayAccess, useGetPublicDisplayState, useListAgendaItems, useListDisplays, usePreviewAgendaImport, useReorderAgendaItems, useResolveDisplayCode, useSendOperatorMessage,
   useTriggerCue, useUpdateAgendaItem,
-  type AgendaImportPreview, type AgendaItem, type Event, type EventDetail, type LiveSession,
+  type AgendaImportPreview, type AgendaItem, type DisplayAccess, type Event, type EventDetail, type LiveSession,
 } from '@workspace/api-client-react';
-import { Link, Route, Switch, Router as WouterRouter, useLocation, useParams } from 'wouter';
+import { Link, Redirect, Route, Switch, Router as WouterRouter, useLocation, useParams } from 'wouter';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 
 const queryClient = new QueryClient();
+const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+const clerkPubKey = publishableKeyFromHost(window.location.hostname, import.meta.env.VITE_CLERK_PUBLISHABLE_KEY);
+const clerkProxyUrl = import.meta.env.VITE_CLERK_PROXY_URL;
+const stripBase = (path: string) => basePath && path.startsWith(basePath) ? path.slice(basePath.length) || '/' : path;
+const clerkAppearance = {
+  theme: shadcn,
+  cssLayerName: 'clerk',
+  options: {
+    logoPlacement: 'inside' as const,
+    logoLinkUrl: basePath || '/',
+    logoImageUrl: `${window.location.origin}${basePath}/logo.svg`,
+  },
+  variables: {
+    colorPrimary: '#ef7858',
+    colorForeground: '#252d3d',
+    colorMutedForeground: '#737b87',
+    colorDanger: '#ae4338',
+    colorBackground: '#f8f5ee',
+    colorInput: '#fcfaf5',
+    colorInputForeground: '#252d3d',
+    colorNeutral: '#d5cfc2',
+    fontFamily: 'Manrope, sans-serif',
+    borderRadius: '0.65rem',
+  },
+  elements: {
+    rootBox: 'w-full flex justify-center',
+    cardBox: 'bg-[#f8f5ee] rounded-xl w-[440px] max-w-full overflow-hidden border border-[#ded7ca]',
+    card: '!shadow-none !border-0 !bg-transparent !rounded-none',
+    footer: '!shadow-none !border-0 !bg-transparent !rounded-none',
+    headerTitle: 'text-[#252d3d] font-extrabold',
+    headerSubtitle: 'text-[#737b87]',
+    formFieldLabel: 'text-[#404958] font-bold',
+    footerActionLink: 'text-[#b95740] font-bold',
+    footerActionText: 'text-[#737b87]',
+    formButtonPrimary: 'bg-[#ef7858] hover:bg-[#dc6548]',
+    formFieldInput: 'bg-[#fcfaf5] text-[#252d3d] border-[#d5cfc2]',
+  },
+};
 const cx = (...v: Array<string | false | undefined>) => v.filter(Boolean).join(' ');
 const fmtDate = (v?: string | null) => v ? new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(v)) : '—';
 const fmtTime = (v?: string | null) => v ? new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' }).format(new Date(v)) : '—';
@@ -50,6 +92,8 @@ function Failure({ retry }: { retry?: () => void }) { return <div className="rou
 
 function Shell({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { signOut } = useClerk();
+  const { user } = useUser();
   return <div className="noise min-h-[100dvh] bg-[#eee9df] text-[#252d3d]">
     <aside className={cx('fixed inset-y-0 left-0 z-40 flex w-[248px] flex-col bg-[#232a3a] px-4 py-5 text-[#e9e6dc] transition-transform md:translate-x-0', mobileOpen ? 'translate-x-0' : '-translate-x-full')}>
       <div className="flex items-center justify-between px-2"><Link href="/" className="focus-ring flex items-center gap-2.5"><span className="grid h-8 w-8 place-items-center rounded-md bg-[#ef7858] text-[#fff8ed]"><Signal className="h-4 w-4" /></span><span className="text-[17px] font-extrabold tracking-[-.04em]">flowline<span className="text-[#ef7858]">.</span></span></Link><button data-testid="button-close-menu" className="text-[#abb1bd] md:hidden" onClick={() => setMobileOpen(false)}><X className="h-5 w-5" /></button></div>
@@ -60,7 +104,7 @@ function Shell({ children }: { children: ReactNode }) {
         <NavLink href="/settings" icon={<Settings />} label="Settings" />
       </nav>
       <div className="mt-9 border-t border-[#3a4150] pt-7"><div className="mono px-2 text-[9px] uppercase tracking-[.2em] text-[#8790a0]">Workspace</div><div className="mt-3 rounded-lg border border-[#3b4352] bg-[#2b3345] p-3"><div className="flex items-center gap-2"><span className="grid h-7 w-7 place-items-center rounded-full bg-[#cdd4df] text-[10px] font-extrabold text-[#30394d]">PA</span><div><div className="text-xs font-bold">Production team</div><div className="mono mt-0.5 text-[9px] text-[#9099aa]">5 operators online</div></div></div></div></div>
-      <div className="mt-auto space-y-1"><button data-testid="button-help" className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm text-[#aeb5c0] hover:bg-[#303849] hover:text-white"><CircleHelp className="h-4 w-4" />Help center</button><button data-testid="button-signout" className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm text-[#aeb5c0] hover:bg-[#303849] hover:text-white"><LogOut className="h-4 w-4" />Sign out</button></div>
+      <div className="mt-auto space-y-1"><div className="truncate px-2 pb-2 text-xs text-[#8790a0]">{user?.primaryEmailAddress?.emailAddress}</div><button data-testid="button-help" className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm text-[#aeb5c0] hover:bg-[#303849] hover:text-white"><CircleHelp className="h-4 w-4" />Help center</button><button data-testid="button-signout" onClick={() => signOut({ redirectUrl: basePath || '/' })} className="flex w-full items-center gap-3 rounded-md px-2 py-2 text-sm text-[#aeb5c0] hover:bg-[#303849] hover:text-white"><LogOut className="h-4 w-4" />Sign out</button></div>
     </aside>
     {mobileOpen && <button aria-label="Close navigation" className="fixed inset-0 z-30 bg-[#172033]/40 md:hidden" onClick={() => setMobileOpen(false)} />}
     <main className="min-h-[100dvh] md:pl-[248px]"><header className="sticky top-0 z-20 flex h-[68px] items-center justify-between border-b border-[#ded7ca] bg-[#eee9df]/90 px-5 backdrop-blur md:px-10"><button data-testid="button-open-menu" className="mr-3 text-[#596375] md:hidden" onClick={() => setMobileOpen(true)}><Menu className="h-5 w-5" /></button><div className="flex-1"><div className="mono text-[9px] uppercase tracking-[.18em] text-[#9a9185]">Live event timing / workspace</div></div><div className="flex items-center gap-3"><span className="hidden items-center gap-2 text-xs text-[#6e7785] sm:flex"><span className="h-1.5 w-1.5 rounded-full bg-[#4b9d84]" />All systems nominal</span><span className="grid h-8 w-8 place-items-center rounded-full bg-[#d7d3c9] text-[10px] font-extrabold text-[#3f4653]">PA</span></div></header><div className="mx-auto max-w-[1440px] px-5 py-8 md:px-10">{children}</div></main>
@@ -152,7 +196,44 @@ function SettingsPage() { const [section, setSection] = useState('Account'); ret
 
 function AuthPage({ mode }: { mode: 'login'|'signup'|'forgot' }) { const copy = mode === 'login' ? ['Welcome back.', 'Sign in to your production desk.'] : mode === 'signup' ? ['Make timing visible.', 'Create a Flowline workspace for your next room.'] : ['Find your way back.', 'We will send a reset link when authentication is connected.']; return <div className="noise grid min-h-[100dvh] bg-[#252d3d] lg:grid-cols-[.85fr_1.15fr]"><div className="hidden flex-col justify-between p-10 text-[#f7f2e8] lg:flex"><Link href="/" className="flex items-center gap-2.5 text-lg font-extrabold"><span className="grid h-8 w-8 place-items-center rounded-md bg-[#ef7858]"><Signal className="h-4 w-4" /></span>flowline<span className="text-[#ef7858]">.</span></Link><div><div className="mono text-[10px] uppercase tracking-[.2em] text-[#ef7858]">A calmer control surface</div><div className="mt-5 max-w-md text-5xl font-extrabold leading-[.95] tracking-[-.08em]">Make every<br />second visible.</div><p className="mt-6 max-w-sm text-sm leading-6 text-[#aeb5c0]">For the people behind the room, in the room, and making the room happen.</p></div><div className="mono text-[10px] uppercase tracking-[.15em] text-[#7d8797]">Flowline / 01</div></div><div className="flex items-center justify-center bg-[#eee9df] p-6 md:p-12"><div className="w-full max-w-[430px]"><Link href="/" className="mb-12 flex items-center gap-2 text-sm font-extrabold text-[#252d3d] lg:hidden"><span className="grid h-8 w-8 place-items-center rounded-md bg-[#ef7858] text-white"><Signal className="h-4 w-4" /></span>flowline<span className="text-[#ef7858]">.</span></Link><div className="mono text-[10px] uppercase tracking-[.2em] text-[#ef7858]">{mode === 'forgot' ? 'Account recovery' : 'Operator access'}</div><h1 className="mt-3 text-4xl font-extrabold tracking-[-.07em]">{copy[0]}</h1><p className="mt-3 text-sm text-[#7c8490]">{copy[1]}</p><div className="mt-8 rounded-lg border border-[#ded7ca] bg-[#f8f5ee] p-6"><Field label="Email"><input data-testid="input-auth-email" type="email" placeholder="you@production.co" /></Field>{mode !== 'forgot' && <Field label="Password"><input data-testid="input-auth-password" type="password" placeholder="••••••••" /></Field>}{mode === 'signup' && <Field label="Workspace name"><input data-testid="input-auth-workspace" placeholder="Your production team" /></Field>}<Button data-testid={`button-auth-${mode}`} variant="accent" className="mt-6 w-full" onClick={() => window.alert('Authentication is not wired yet. This screen is ready for your account flow.')}>{mode === 'login' ? 'Sign in' : mode === 'signup' ? 'Create workspace' : 'Send reset link'}</Button><div className="mt-5 text-center text-xs text-[#858c93]">{mode === 'login' ? <>New to Flowline? <Link href="/signup" className="font-bold text-[#b95740]" data-testid="link-signup">Create an account</Link></> : mode === 'signup' ? <>Already have an account? <Link href="/login" className="font-bold text-[#b95740]" data-testid="link-login">Sign in</Link></> : <Link href="/login" className="font-bold text-[#b95740]" data-testid="link-back-login">Back to sign in</Link>}</div></div><div className="mt-5 flex items-center gap-2 text-[11px] text-[#8d918d]"><TriangleAlert className="h-3.5 w-3.5" />Authentication is a placeholder while the account service is being connected.</div></div></div></div>; }
 
+function Landing() {
+  return <div className="noise min-h-[100dvh] bg-[#eee9df] text-[#252d3d]"><header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6"><div className="flex items-center gap-2.5 text-lg font-extrabold"><span className="grid h-9 w-9 place-items-center rounded-md bg-[#ef7858] text-white"><Signal className="h-4 w-4" /></span>flowline<span className="text-[#ef7858]">.</span></div><div className="flex gap-2"><Link href="/join"><Button variant="outline">Join display</Button></Link><Link href="/sign-in"><Button>Operator sign in</Button></Link></div></header><main className="mx-auto grid min-h-[calc(100dvh-96px)] max-w-6xl items-center gap-12 px-6 py-16 lg:grid-cols-[1.1fr_.9fr]"><div><div className="mono text-[10px] uppercase tracking-[.2em] text-[#ef7858]">Live event timing / without the noise</div><h1 className="mt-5 text-[clamp(3.6rem,8vw,7.2rem)] font-extrabold leading-[.88] tracking-[-.085em]">Keep every room<br/><span className="text-[#7d8795]">on the same second.</span></h1><p className="mt-8 max-w-xl text-lg leading-8 text-[#677180]">A precise operator desk, synchronized stage displays, and simple guest access for speakers and crew.</p><div className="mt-9 flex flex-wrap gap-3"><Link href="/sign-up"><Button variant="accent" className="px-5 py-3">Create an operator account <ArrowRight className="h-4 w-4"/></Button></Link><Link href="/join"><Button variant="outline" className="px-5 py-3">I have a display code</Button></Link></div></div><div className="rounded-2xl bg-[#252d3d] p-7 text-[#f7f2e8] shadow-2xl shadow-[#252d3d]/15"><div className="mono text-[10px] uppercase tracking-[.18em] text-[#ef7858]">Speaker confidence / live</div><div className="mt-10 text-2xl font-extrabold">Opening keynote</div><div className="timer mt-7 text-[clamp(5rem,11vw,9rem)] leading-none">12:48</div><div className="mt-8 border-t border-[#414a5d] pt-5 text-sm text-[#aeb5c0]">You’re on time. Next cue: audience Q&amp;A.</div></div></main></div>;
+}
+
+function RootRoute() { const { isLoaded, isSignedIn } = useAuth(); if (!isLoaded) return <Loading />; return isSignedIn ? <Redirect to="/app" /> : <Landing />; }
+function PairingShortcut() {
+  const [location] = useLocation();
+  const eventId = location.match(/^\/events\/([^/]+)/)?.[1] ?? '';
+  const q = useGetEvent(eventId, { query: { enabled: !!eventId, queryKey: getGetEventQueryKey(eventId) } });
+  const display = q.data?.displays[0];
+  if (!eventId || !display || location.includes('/share/')) return null;
+  return <Link href={`/events/${eventId}/share/${display.id}`} data-testid="link-share-display" className="fixed bottom-5 right-5 z-50 flex items-center gap-2 rounded-full bg-[#ef7858] px-4 py-3 text-sm font-extrabold text-white shadow-xl shadow-[#252d3d]/20 hover:bg-[#dc6548]"><QrCode className="h-4 w-4"/>Share display</Link>;
+}
+function Protected({ children }: { children: ReactNode }) { const { isLoaded, isSignedIn } = useAuth(); if (!isLoaded) return <Loading />; return isSignedIn ? <><PairingShortcut/>{children}</> : <Redirect to="/" />; }
+function ClerkPage({ mode }: { mode: 'sign-in'|'sign-up' }) { return <div className="noise grid min-h-[100dvh] place-items-center bg-[#eee9df] p-6">{mode === 'sign-in' ? <SignIn routing="path" path={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} /> : <SignUp routing="path" path={`${basePath}/sign-up`} signInUrl={`${basePath}/sign-in`} />}</div>; }
+
+function JoinDisplay() {
+  const [, setLocation] = useLocation(); const resolve = useResolveDisplayCode(); const [code, setCode] = useState(''); const [error, setError] = useState('');
+  const submit = (e: FormEvent) => { e.preventDefault(); setError(''); resolve.mutate({ data: { code: code.replace(/\s/g, '').toUpperCase() } }, { onSuccess: ({ token }) => setLocation(`/guest/${token}`), onError: () => setError('That code is invalid or has expired.') }); };
+  return <div className="noise grid min-h-[100dvh] place-items-center bg-[#252d3d] p-6 text-[#f7f2e8]"><form onSubmit={submit} className="w-full max-w-md rounded-xl border border-[#465064] bg-[#2b3345] p-7"><div className="flex items-center gap-2.5 text-lg font-extrabold"><span className="grid h-9 w-9 place-items-center rounded-md bg-[#ef7858]"><Signal className="h-4 w-4"/></span>flowline<span className="text-[#ef7858]">.</span></div><div className="mono mt-10 text-[10px] uppercase tracking-[.18em] text-[#ef7858]">Guest display access</div><h1 className="mt-3 text-3xl font-extrabold tracking-[-.05em]">Enter the room code.</h1><p className="mt-2 text-sm leading-6 text-[#aeb5c0]">No account required. This device will receive a read-only synchronized timer.</p><input autoFocus aria-label="Display code" data-testid="input-display-code" value={code} onChange={(e) => setCode(e.target.value)} maxLength={8} className="mono mt-7 w-full rounded-lg border border-[#596277] bg-[#202738] px-4 py-4 text-center text-3xl uppercase tracking-[.28em] outline-none focus:border-[#ef7858]" placeholder="A1B2C3"/>{error && <div role="alert" className="mt-3 text-sm text-[#ffb39b]">{error}</div>}<Button data-testid="button-join-display" variant="accent" className="mt-4 w-full py-3" disabled={code.length < 6 || resolve.isPending}>{resolve.isPending ? <Loader2 className="h-4 w-4 animate-spin"/> : <DisplayIcon className="h-4 w-4"/>}Open timer</Button><Link href="/" className="mt-6 block text-center text-xs text-[#929cab]">Back to Flowline</Link></form></div>;
+}
+
+function GuestDisplay() {
+  const { token = '' } = useParams<{ token: string }>(); const q = useGetPublicDisplayState(token, { query: { queryKey: ['guest-display', token], enabled: !!token, refetchInterval: 1000 } }); const data = q.data; const session = data?.session; const active = data?.agenda.find((i) => i.id === session?.activeItemId) ?? data?.agenda.find((i) => i.status === 'active'); const [seconds, setSeconds] = useState(session?.remainingSeconds ?? 0);
+  useEffect(() => { if (session) setSeconds(session.remainingSeconds); }, [session?.remainingSeconds]); useEffect(() => { if (session?.state === 'running' || session?.state === 'overtime') { const id = window.setInterval(() => setSeconds((s) => s - 1), 1000); return () => window.clearInterval(id); } return undefined; }, [session?.state]);
+  if (q.isLoading) return <div className="grid min-h-[100dvh] place-items-center bg-[#202738] text-white"><Loading /></div>; if (!data || !session) return <div className="grid min-h-[100dvh] place-items-center bg-[#202738] p-6 text-center text-white"><div><TriangleAlert className="mx-auto text-[#ef7858]"/><h1 className="mt-4 text-2xl font-extrabold">Display access ended</h1><Link href="/join"><Button variant="accent" className="mt-6">Enter another code</Button></Link></div></div>;
+  return <div className="min-h-[100dvh] bg-[#202738] px-6 py-8 text-[#f4f0e7]"><div className="flex items-center justify-between"><div className="font-extrabold">flowline<span className="text-[#ef7858]">.</span></div><Tag tone="live">Read only</Tag></div><div className="mx-auto flex min-h-[calc(100dvh-90px)] max-w-6xl flex-col justify-center text-center"><div className="mono text-xs uppercase tracking-[.2em] text-[#ef7858]">{data.event.name}</div><h1 className="mt-8 text-[clamp(2.5rem,7vw,6.8rem)] font-extrabold leading-[.95] tracking-[-.08em]">{active?.title || 'Stand by'}</h1><div className={cx('timer mt-12 text-[clamp(5rem,18vw,15rem)] leading-none', seconds < 0 && 'text-[#ff9b7c]')}>{formatTimer(seconds)}</div><div className="mt-8 text-xl text-[#a8b0ba]">{active?.speaker || 'Next cue pending'}</div>{session.operatorMessage && <div className="mx-auto mt-12 max-w-2xl rounded-lg border border-[#596277] bg-[#2b3345] px-6 py-4 text-lg">{session.operatorMessage}</div>}</div></div>;
+}
+
+function ShareDisplay() {
+  const { eventId = '', displayId = '' } = useParams<{ eventId: string; displayId: string }>(); const create = useCreateDisplayAccess(); const [access, setAccess] = useState<DisplayAccess | null>(null); const url = access ? `${window.location.origin}${basePath}/guest/${access.token}` : '';
+  return <Shell><div className="mx-auto max-w-2xl"><Link href={`/events/${eventId}`} className="text-xs font-bold text-[#737b87]"><ArrowLeft className="mr-2 inline h-4 w-4"/>Back to event</Link><div className="mt-8 rounded-xl border border-[#ded7ca] bg-[#f8f5ee] p-7"><div className="mono text-[10px] uppercase tracking-[.18em] text-[#ef7858]">Guest display pairing</div><h1 className="mt-3 text-3xl font-extrabold tracking-[-.06em]">Put the timer on another screen.</h1><p className="mt-3 text-sm leading-6 text-[#737b87]">Create a temporary read-only link. Guests can scan the QR code or enter the six-character code without signing in.</p>{!access ? <Button data-testid="button-create-display-code" variant="accent" className="mt-7" disabled={create.isPending} onClick={() => create.mutate({ eventId, data: { displayId, expiresInMinutes: 480 } }, { onSuccess: setAccess })}>{create.isPending ? <Loader2 className="h-4 w-4 animate-spin"/> : <QrCode className="h-4 w-4"/>}Create pairing code</Button> : <div className="mt-8 grid items-center gap-7 rounded-lg bg-[#eee9df] p-6 sm:grid-cols-[180px_1fr]"><div className="rounded-lg bg-white p-4"><QRCode value={url} size={148}/></div><div><div className="mono text-[10px] uppercase tracking-[.18em] text-[#8b8f8d]">Short code</div><div data-testid="display-pairing-code" className="mono mt-2 text-4xl font-medium tracking-[.16em]">{access.code}</div><div className="mt-4 break-all text-xs leading-5 text-[#777f88]">{url}</div><Button variant="outline" className="mt-5" onClick={() => navigator.clipboard.writeText(url)}>Copy guest link</Button></div></div>}</div></div></Shell>;
+}
+
+function ClerkQueryClientCacheInvalidator() { const { addListener } = useClerk(); const client = useQueryClient(); const previous = useRef<string | null | undefined>(undefined); useEffect(() => addListener(({ user }) => { const next = user?.id ?? null; if (previous.current !== undefined && previous.current !== next) client.clear(); previous.current = next; }), [addListener, client]); return null; }
+
 function NotFound() { return <Shell><div className="grid min-h-[60vh] place-items-center text-center"><div><div className="mono text-xs text-[#ef7858]">404 / no cue found</div><h1 className="mt-3 text-4xl font-extrabold tracking-[-.06em]">This page missed its mark.</h1><Link href="/" data-testid="link-not-found-home"><Button className="mt-6">Back to overview</Button></Link></div></div></Shell>; }
-function Router() { const [location] = useLocation(); return <ErrorBoundary resetKey={location}><Switch><Route path="/login"><AuthPage mode="login" /></Route><Route path="/signup"><AuthPage mode="signup" /></Route><Route path="/forgot-password"><AuthPage mode="forgot" /></Route><Route path="/events/new" component={NewEvent} /><Route path="/events/:eventId/display/:displayId" component={DisplayPage} /><Route path="/events/:eventId/import" component={ImportPage} /><Route path="/events/:eventId" component={EventWorkspace} /><Route path="/settings" component={SettingsPage} /><Route path="/" component={Home} /><Route component={NotFound} /></Switch></ErrorBoundary>; }
-function App() { return <QueryClientProvider client={queryClient}><TooltipProvider><WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}><Router /></WouterRouter><Toaster /></TooltipProvider></QueryClientProvider>; }
+function Router() { const [location] = useLocation(); return <ErrorBoundary resetKey={location}><Switch><Route path="/sign-in/*?"><ClerkPage mode="sign-in"/></Route><Route path="/sign-up/*?"><ClerkPage mode="sign-up"/></Route><Route path="/login"><Redirect to="/sign-in"/></Route><Route path="/signup"><Redirect to="/sign-up"/></Route><Route path="/join" component={JoinDisplay}/><Route path="/guest/:token" component={GuestDisplay}/><Route path="/events/:eventId/share/:displayId"><Protected><ShareDisplay/></Protected></Route><Route path="/events/new"><Protected><NewEvent/></Protected></Route><Route path="/events/:eventId/display/:displayId"><Protected><DisplayPage/></Protected></Route><Route path="/events/:eventId/import"><Protected><ImportPage/></Protected></Route><Route path="/events/:eventId"><Protected><EventWorkspace/></Protected></Route><Route path="/settings"><Protected><SettingsPage/></Protected></Route><Route path="/app"><Protected><Home/></Protected></Route><Route path="/" component={RootRoute}/><Route component={NotFound}/></Switch></ErrorBoundary>; }
+function ClerkProviderWithRoutes() { const [, setLocation] = useLocation(); return <ClerkProvider publishableKey={clerkPubKey} proxyUrl={clerkProxyUrl} appearance={clerkAppearance} signInUrl={`${basePath}/sign-in`} signUpUrl={`${basePath}/sign-up`} localization={{ signIn: { start: { title: 'Welcome back', subtitle: 'Sign in to open your operator desk' } }, signUp: { start: { title: 'Create your operator account', subtitle: 'Bring your next room onto Flowline' } } }} routerPush={(to) => setLocation(stripBase(to))} routerReplace={(to) => setLocation(stripBase(to), { replace: true })}><QueryClientProvider client={queryClient}><ClerkQueryClientCacheInvalidator/><TooltipProvider><Router/><Toaster/></TooltipProvider></QueryClientProvider></ClerkProvider>; }
+function App() { return <WouterRouter base={basePath}><ClerkProviderWithRoutes/></WouterRouter>; }
 export default App;

@@ -640,3 +640,109 @@ export const TriggerCueResponse = zod.object({
 })
 
 
+/**
+ * @summary Create a revocable guest display code
+ */
+export const CreateDisplayAccessParams = zod.object({
+  "eventId": zod.coerce.string()
+})
+
+export const createDisplayAccessBodyExpiresInMinutesMin = 5;
+export const createDisplayAccessBodyExpiresInMinutesMax = 10080;
+
+
+
+export const CreateDisplayAccessBody = zod.object({
+  "displayId": zod.string(),
+  "expiresInMinutes": zod.int().min(createDisplayAccessBodyExpiresInMinutesMin).max(createDisplayAccessBodyExpiresInMinutesMax).optional()
+})
+
+export const CreateDisplayAccessResponse = zod.object({
+  "id": zod.string(),
+  "eventId": zod.string(),
+  "displayId": zod.string(),
+  "code": zod.string(),
+  "token": zod.string(),
+  "expiresAt": zod.string()
+})
+
+
+/**
+ * @summary Exchange a guest code for a display token
+ */
+export const resolveDisplayCodeBodyCodeMin = 6;
+export const resolveDisplayCodeBodyCodeMax = 8;
+
+
+
+export const ResolveDisplayCodeBody = zod.object({
+  "code": zod.string().min(resolveDisplayCodeBodyCodeMin).max(resolveDisplayCodeBodyCodeMax)
+})
+
+export const ResolveDisplayCodeResponse = zod.object({
+  "token": zod.string()
+})
+
+
+/**
+ * @summary Get read-only timer state using a guest token
+ */
+export const GetPublicDisplayStateParams = zod.object({
+  "token": zod.coerce.string()
+})
+
+export const GetPublicDisplayStateResponse = zod.object({
+  "event": zod.object({
+  "name": zod.string(),
+  "timezone": zod.string()
+}),
+  "display": zod.object({
+  "id": zod.string(),
+  "eventId": zod.string(),
+  "name": zod.string(),
+  "kind": zod.enum(['speaker', 'stage', 'audience', 'backstage']),
+  "connectionStatus": zod.enum(['online', 'offline', 'pairing']),
+  "assignedLayout": zod.string(),
+  "lastSeenAt": zod.string().nullish(),
+  "currentContent": zod.string()
+}),
+  "agenda": zod.array(zod.object({
+  "id": zod.string(),
+  "eventId": zod.string(),
+  "position": zod.int(),
+  "title": zod.string(),
+  "type": zod.enum(['opening', 'keynote', 'panel', 'break', 'transition', 'video', 'performance', 'qa', 'closing', 'custom']),
+  "speaker": zod.string().nullish(),
+  "plannedStart": zod.string().nullish(),
+  "plannedDurationMinutes": zod.int(),
+  "warningMinutes": zod.int(),
+  "notes": zod.string().nullish(),
+  "status": zod.enum(['queued', 'active', 'complete', 'skipped']),
+  "actualStartedAt": zod.string().nullish(),
+  "actualEndedAt": zod.string().nullish()
+})),
+  "session": zod.object({
+  "eventId": zod.string(),
+  "state": zod.enum(['idle', 'running', 'paused', 'overtime', 'completed']),
+  "activeItemId": zod.string().nullable(),
+  "remainingSeconds": zod.int(),
+  "elapsedSeconds": zod.int(),
+  "serverTime": zod.string(),
+  "startedAt": zod.string().nullish(),
+  "pausedAt": zod.string().nullish(),
+  "operatorMessage": zod.string().nullable(),
+  "activeCue": zod.string().nullable()
+})
+})
+
+
+/**
+ * @summary Revoke guest display access
+ */
+export const RevokeDisplayAccessParams = zod.object({
+  "accessId": zod.coerce.string()
+})
+
+export const RevokeDisplayAccessResponse = zod.void()
+
+

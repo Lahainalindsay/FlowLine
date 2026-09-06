@@ -1,5 +1,6 @@
-import { Router, type IRouter } from "express";
-import { randomUUID } from "node:crypto";
+import { Router, type IRouter, type RequestHandler } from "express";
+import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { getAuth } from "@clerk/express";
 import {
   ApplyAgendaImportBody,
   ApplyAgendaImportParams,
@@ -8,6 +9,8 @@ import {
   CreateAgendaItemParams,
   CreateDisplayBody,
   CreateDisplayParams,
+  CreateDisplayAccessBody,
+  CreateDisplayAccessParams,
   CreateEventBody,
   ControlLiveSessionBody,
   ControlLiveSessionParams,
@@ -16,12 +19,15 @@ import {
   DeleteEventParams,
   GetEventParams,
   GetLiveSessionParams,
+  GetPublicDisplayStateParams,
   ListAgendaItemsParams,
   ListDisplaysParams,
   PreviewAgendaImportBody,
   PreviewAgendaImportParams,
   ReorderAgendaItemsBody,
   ReorderAgendaItemsParams,
+  ResolveDisplayCodeBody,
+  RevokeDisplayAccessParams,
   SendOperatorMessageBody,
   SendOperatorMessageParams,
   TriggerCueBody,
@@ -33,6 +39,7 @@ import {
 import { db } from "@workspace/db";
 import {
   agendaItemsTable,
+  displayAccessTable,
   displaysTable,
   eventsTable,
   liveSessionsTable,
@@ -43,6 +50,41 @@ const router: IRouter = Router();
 
 const nowIso = () => new Date().toISOString();
 const id = () => randomUUID();
+const accessSecret = process.env.SESSION_SECRET ?? (() => {
+  throw new Error("SESSION_SECRET is required for guest display access");
+})();
+
+const codeHash = (code: string) =>
+  createHash("sha256").update(code.toUpperCase().replace(/\s/g, "")).digest("hex");
+
+function createAccessToken(accessId: string, expiresAt: Date) {
+  const payload = `${accessId}.${Math.floor(expiresAt.getTime() / 1000)}`;
+  const signature = createHmac("sha256", accessSecret).update(payload).digest("base64url");
+  return `${payload}.${signature}`;
+}
+
+function parseAccessToken(token: string) {
+  const [accessId, expiresRaw, signature] = token.split(".");
+  if (!accessId || !expiresRaw || !signature) return null;
+  const expiresAt = Number(expiresRaw);
+  if (!Number.isFinite(expiresAt) || expiresAt * 1000 <= Date.now()) return null;
+  const payload = `${accessId}.${expiresRaw}`;
+  const expected = createHmac("sha256", accessSecret).update(payload).digest();
+  const actual = Buffer.from(signature, "base64url");
+  if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return null;
+  return { accessId, expiresAt: new Date(expiresAt * 1000) };
+}
+
+const requireAuth: RequestHandler = (req, res, next) => {
+  const auth = getAuth(req);
+  const userId = auth?.sessionClaims?.userId as string | undefined || auth?.userId;
+  if (!userId) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+  res.locals.userId = userId;
+  next();
+};
 
 function iso(value: Date | null) {
   return value ? value.toISOString() : null;
@@ -181,11 +223,111 @@ function displayPayload(display: typeof displaysTable.$inferSelect) {
   };
 }
 
+router.post("/display-access/resolve", async (req, res) => {
+  const body = ResolveDisplayCodeBody.parse(req.body);
+  const [access] = await db
+    .select()
+    .from(displayAccessTable)
+    .where(eq(displayAccessTable.codeHash, codeHash(body.code)))
+    .orderBy(desc(displayAccessTable.createdAt))
+    .limit(1);
+  if (!access || access.revokedAt || access.expiresAt <= new Date()) {
+    res.status(404).json({ error: "This display code is invalid or expired" });
+    return;
+  }
+  res.json({ token: createAccessToken(access.id, access.expiresAt) });
+});
+
+router.get("/display-access/:token", async (req, res) => {
+  const params = GetPublicDisplayStateParams.parse(req.params);
+  const parsed = parseAccessToken(params.token);
+  if (!parsed) {
+    res.status(401).json({ error: "Display access expired" });
+    return;
+  }
+  const [access] = await db
+    .select()
+    .from(displayAccessTable)
+    .where(eq(displayAccessTable.id, parsed.accessId))
+    .limit(1);
+  if (!access || access.revokedAt || access.expiresAt <= new Date()) {
+    res.status(401).json({ error: "Display access expired" });
+    return;
+  }
+  const [[event], [display], agenda, session] = await Promise.all([
+    db.select().from(eventsTable).where(eq(eventsTable.id, access.eventId)).limit(1),
+    db.select().from(displaysTable).where(and(eq(displaysTable.id, access.displayId), eq(displaysTable.eventId, access.eventId))).limit(1),
+    getAgenda(access.eventId),
+    ensureSession(access.eventId),
+  ]);
+  if (!event || !display) {
+    res.status(404).json({ error: "Display not found" });
+    return;
+  }
+  await Promise.all([
+    db.update(displayAccessTable).set({ lastSeenAt: new Date() }).where(eq(displayAccessTable.id, access.id)),
+    db.update(displaysTable).set({ lastSeenAt: new Date(), connectionStatus: "online" }).where(eq(displaysTable.id, display.id)),
+  ]);
+  res.json({
+    event: { name: event.name, timezone: event.timezone },
+    display: displayPayload({ ...display, lastSeenAt: new Date(), connectionStatus: "online" }),
+    agenda: agenda.map(agendaPayload),
+    session: sessionPayload(await persistTick(session)),
+  });
+});
+
+router.use(requireAuth);
+
+router.use("/events/:eventId", async (req, res, next) => {
+  const eventId = Array.isArray(req.params.eventId) ? req.params.eventId[0] : req.params.eventId;
+  const [event] = await db
+    .select({ id: eventsTable.id })
+    .from(eventsTable)
+    .where(and(eq(eventsTable.id, eventId), eq(eventsTable.ownerUserId, res.locals.userId)))
+    .limit(1);
+  if (!event) {
+    res.status(404).json({ error: "Event not found" });
+    return;
+  }
+  next();
+});
+
+router.use("/agenda/:itemId", async (req, res, next) => {
+  const itemId = Array.isArray(req.params.itemId) ? req.params.itemId[0] : req.params.itemId;
+  const [owned] = await db
+    .select({ id: agendaItemsTable.id })
+    .from(agendaItemsTable)
+    .innerJoin(eventsTable, eq(eventsTable.id, agendaItemsTable.eventId))
+    .where(and(eq(agendaItemsTable.id, itemId), eq(eventsTable.ownerUserId, res.locals.userId)))
+    .limit(1);
+  if (!owned) {
+    res.status(404).json({ error: "Agenda item not found" });
+    return;
+  }
+  next();
+});
+
+router.use("/displays/:displayId", async (req, res, next) => {
+  const displayId = Array.isArray(req.params.displayId) ? req.params.displayId[0] : req.params.displayId;
+  const [owned] = await db
+    .select({ id: displaysTable.id })
+    .from(displaysTable)
+    .innerJoin(eventsTable, eq(eventsTable.id, displaysTable.eventId))
+    .where(and(eq(displaysTable.id, displayId), eq(eventsTable.ownerUserId, res.locals.userId)))
+    .limit(1);
+  if (!owned) {
+    res.status(404).json({ error: "Display not found" });
+    return;
+  }
+  next();
+});
+
 router.get("/dashboard/summary", async (req, res) => {
   try {
     const events = await db
       .select()
       .from(eventsTable)
+      .where(eq(eventsTable.ownerUserId, res.locals.userId))
       .orderBy(asc(eventsTable.date), desc(eventsTable.updatedAt));
     const summaries = await Promise.all(events.map(eventPayload));
     const activeEvent =
@@ -216,6 +358,7 @@ router.get("/events", async (req, res) => {
     const events = await db
       .select()
       .from(eventsTable)
+      .where(eq(eventsTable.ownerUserId, res.locals.userId))
       .orderBy(asc(eventsTable.date), desc(eventsTable.updatedAt));
     res.json(await Promise.all(events.map(eventPayload)));
   } catch (error) {
@@ -232,6 +375,7 @@ router.post("/events", async (req, res) => {
       .insert(eventsTable)
       .values({
         id: eventId,
+        ownerUserId: res.locals.userId,
         name: body.name,
         date: body.date,
         venue: body.venue ?? null,
@@ -615,6 +759,60 @@ router.post("/events/:eventId/cues", async (req, res) => {
     label: body.label,
     triggeredAt: nowIso(),
   });
+});
+
+router.post("/events/:eventId/display-access", async (req, res) => {
+  const params = CreateDisplayAccessParams.parse(req.params);
+  const body = CreateDisplayAccessBody.parse(req.body);
+  const [display] = await db
+    .select()
+    .from(displaysTable)
+    .where(and(eq(displaysTable.id, body.displayId), eq(displaysTable.eventId, params.eventId)))
+    .limit(1);
+  if (!display) {
+    res.status(404).json({ error: "Display not found" });
+    return;
+  }
+  const expiresAt = new Date(Date.now() + (body.expiresInMinutes ?? 480) * 60_000);
+  const code = randomBytes(4).toString("hex").slice(0, 6).toUpperCase();
+  const accessId = id();
+  await db.transaction(async (tx) => {
+    await tx
+      .update(displayAccessTable)
+      .set({ revokedAt: new Date() })
+      .where(and(eq(displayAccessTable.eventId, params.eventId), eq(displayAccessTable.displayId, body.displayId)));
+    await tx.insert(displayAccessTable).values({
+      id: accessId,
+      eventId: params.eventId,
+      displayId: body.displayId,
+      codeHash: codeHash(code),
+      expiresAt,
+    });
+  });
+  res.status(201).json({
+    id: accessId,
+    eventId: params.eventId,
+    displayId: body.displayId,
+    code,
+    token: createAccessToken(accessId, expiresAt),
+    expiresAt: expiresAt.toISOString(),
+  });
+});
+
+router.post("/display-access/:accessId/revoke", async (req, res) => {
+  const params = RevokeDisplayAccessParams.parse(req.params);
+  const [owned] = await db
+    .select({ id: displayAccessTable.id })
+    .from(displayAccessTable)
+    .innerJoin(eventsTable, eq(eventsTable.id, displayAccessTable.eventId))
+    .where(and(eq(displayAccessTable.id, params.accessId), eq(eventsTable.ownerUserId, res.locals.userId)))
+    .limit(1);
+  if (!owned) {
+    res.status(404).json({ error: "Display access not found" });
+    return;
+  }
+  await db.update(displayAccessTable).set({ revokedAt: new Date() }).where(eq(displayAccessTable.id, params.accessId));
+  res.status(204).send();
 });
 
 export default router;

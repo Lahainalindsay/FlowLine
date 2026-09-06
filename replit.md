@@ -9,7 +9,7 @@ Flowline is a live event timing platform for planning a run of show, operating a
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL` — Postgres connection string
+- Required env: `DATABASE_URL`, `SESSION_SECRET`, and Replit-managed Clerk keys.
 
 ## Stack
 
@@ -35,7 +35,8 @@ Flowline is a live event timing platform for planning a run of show, operating a
 - Overtime remains an advancing state and can be paused, resumed, reset, or moved to the next segment.
 - Agenda imports are previewed first and applied in one database transaction to prevent partial or scrambled schedules.
 - Live-session transitions update agenda status in the same transaction so operator and display views agree.
-- Authentication is intentionally not enabled until an external identity provider is approved; do not add homegrown password storage.
+- Clerk owns operator authentication; operator APIs derive ownership from the verified server session.
+- Guest displays use revocable, expiring access rows, hashed short codes, and HMAC-signed read-only tokens.
 
 ## Product
 
@@ -45,6 +46,8 @@ Flowline is a live event timing platform for planning a run of show, operating a
 - Send operator messages and production cues to registered presentation displays.
 - Use responsive operator controls on desktop or mobile.
 - Open display-specific speaker/stage presentation links with synchronized timing.
+- Sign in with a private operator account; event records are isolated by Clerk user ownership.
+- Pair unauthenticated guest devices with a QR code or six-character code for read-only timer access.
 
 ## User preferences
 
@@ -55,7 +58,7 @@ Flowline is a live event timing platform for planning a run of show, operating a
 - Run API code generation after every OpenAPI change, before typechecking callers.
 - Do not write agenda imports as concurrent single-row requests; use the atomic import endpoint.
 - A session can be `overtime` while its clock is still advancing.
-- Auth routes are visual placeholders until the user approves an identity-provider integration.
+- Public guest tokens never authorize operator commands; keep all event mutations behind Clerk authentication and ownership checks.
 
 ## Pointers
 

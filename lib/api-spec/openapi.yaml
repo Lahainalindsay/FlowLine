@@ -353,6 +353,74 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Cue"
+  /events/{eventId}/display-access:
+    parameters:
+      - $ref: "#/components/parameters/EventId"
+    post:
+      operationId: createDisplayAccess
+      tags: [live]
+      summary: Create a revocable guest display code
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DisplayAccessInput"
+      responses:
+        "201":
+          description: Guest display access
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DisplayAccess"
+  /display-access/resolve:
+    post:
+      operationId: resolveDisplayCode
+      tags: [live]
+      summary: Exchange a guest code for a display token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DisplayCodeInput"
+      responses:
+        "200":
+          description: Resolved guest token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DisplayToken"
+  /display-access/{token}:
+    parameters:
+      - name: token
+        in: path
+        required: true
+        schema: { type: string }
+    get:
+      operationId: getPublicDisplayState
+      tags: [live]
+      summary: Get read-only timer state using a guest token
+      responses:
+        "200":
+          description: Public display state
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PublicDisplayState"
+  /display-access/{accessId}/revoke:
+    parameters:
+      - name: accessId
+        in: path
+        required: true
+        schema: { type: string }
+    post:
+      operationId: revokeDisplayAccess
+      tags: [live]
+      summary: Revoke guest display access
+      responses:
+        "204":
+          description: Revoked
 components:
   parameters:
     EventId:
@@ -532,6 +600,51 @@ components:
         name: { type: string, minLength: 1 }
         kind: { type: string, enum: [speaker, stage, audience, backstage] }
         assignedLayout: { type: string }
+    DisplayAccessInput:
+      type: object
+      required: [displayId]
+      properties:
+        displayId: { type: string }
+        expiresInMinutes: { type: integer, minimum: 5, maximum: 10080 }
+    DisplayAccess:
+      type: object
+      required: [id, eventId, displayId, code, token, expiresAt]
+      properties:
+        id: { type: string }
+        eventId: { type: string }
+        displayId: { type: string }
+        code: { type: string }
+        token: { type: string }
+        expiresAt: { type: string }
+    DisplayCodeInput:
+      type: object
+      required: [code]
+      properties:
+        code: { type: string, minLength: 6, maxLength: 8 }
+    DisplayToken:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string }
+    PublicDisplayEvent:
+      type: object
+      required: [name, timezone]
+      properties:
+        name: { type: string }
+        timezone: { type: string }
+    PublicDisplayState:
+      type: object
+      required: [event, display, agenda, session]
+      properties:
+        event:
+          $ref: "#/components/schemas/PublicDisplayEvent"
+        display:
+          $ref: "#/components/schemas/Display"
+        agenda:
+          type: array
+          items: { $ref: "#/components/schemas/AgendaItem" }
+        session:
+          $ref: "#/components/schemas/LiveSession"
     LiveSession:
       type: object
       required: [eventId, state, activeItemId, remainingSeconds, elapsedSeconds, serverTime, operatorMessage, activeCue]
