@@ -1,6 +1,6 @@
 kind = "web"
 previewPath = "/"
-title = "Flowline"
+title = "StageTime"
 description = "A real-time live event timing platform for producers, speakers, backstage teams, and presenters. Build a run of show, control live sessions, and synchronize every display from one calm operator console."
 version = "1.0.0"
 id = "artifacts/flowline"
