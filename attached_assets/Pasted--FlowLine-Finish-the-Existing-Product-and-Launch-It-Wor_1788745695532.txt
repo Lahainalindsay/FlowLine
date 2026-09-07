@@ -1,0 +1,994 @@
+# FlowLine — Finish the Existing Product and Launch It
+
+Work from the CURRENT `Lahainalindsay/FlowLine` repository and the existing Replit project.
+
+DO NOT rebuild this project from scratch.
+
+DO NOT simplify or remove advanced functionality merely to make the codebase smaller.
+
+DO NOT migrate away from the current architecture.
+
+Preserve the existing:
+
+* React/Vite frontend
+* Express API
+* PostgreSQL
+* Drizzle ORM
+* Clerk authentication
+* OpenAPI/generated clients
+* server-authoritative timer architecture
+* realtime/multi-device capabilities
+* display pairing
+* messages
+* cues
+* imports
+* history
+* billing infrastructure
+* existing advanced features
+
+The application is already more advanced than a bare StageTimer clone.
+
+The objective now is:
+
+# MAKE THE EXISTING PRODUCT RELIABLE, COMPLETE, POLISHED, DEPLOYED, AND LAUNCHABLE.
+
+Do not spend this task inventing more roadmap features.
+
+---
+
+# PRODUCT
+
+Customer-facing name:
+
+**FlowLine**
+
+Positioning:
+
+**Keep every moment on schedule.**
+
+FlowLine is a professional synchronized timing and run-of-show platform.
+
+It should work well for:
+
+* live events
+* conferences
+* presentations
+* meetings
+* public comments
+* churches
+* livestreams
+* broadcasts
+* debates
+* workout/video creators
+* other structured timed sequences
+
+These are NOT separate applications.
+
+Use the same:
+
+Event → Rundown → Segment → Timer → Display
+
+architecture.
+
+---
+
+# CORE PRINCIPLE
+
+Do not decide that an advanced feature should be removed simply because it is not required for the simplest MVP.
+
+If it already works or is close to working:
+
+KEEP IT.
+
+Examples:
+
+* templates
+* imports
+* history
+* messages
+* cues
+* multiple displays
+* pairing
+* schedule intelligence
+* billing infrastructure
+* advanced Event settings
+
+The priority is to make the current system coherent and reliable.
+
+Only hide a feature if it is genuinely broken, unsafe, or unfinished enough that exposing it would damage the launch.
+
+---
+
+# FIRST TASK — COMPLETE PRODUCT AUDIT
+
+Before making substantial changes, inspect the entire repository.
+
+Audit:
+
+* frontend
+* API server
+* database
+* Drizzle schema
+* authentication
+* API authorization
+* timer engine
+* realtime synchronization
+* Event CRUD
+* rundown
+* segment editing
+* pairing
+* guest displays
+* messages
+* cues
+* imports
+* templates
+* history
+* reporting
+* billing
+* deployment
+* tests
+* responsive/mobile behavior
+
+Classify every existing feature as:
+
+1. WORKING
+2. PARTIALLY WORKING
+3. BROKEN
+4. UNUSED/DEAD
+5. SECURITY ISSUE
+6. NEEDS MANUAL TESTING
+
+Do not remove functionality based only on incomplete documentation.
+
+Test it.
+
+---
+
+# PRIORITY 1 — MAKE EVENT CREATION BULLETPROOF
+
+A new authenticated user must be able to:
+
+1. Sign up.
+2. Sign in.
+3. Create an Event.
+4. Open the Event.
+5. Refresh.
+6. Still see the Event.
+
+Event creation must never silently fail.
+
+Show useful errors.
+
+Server must enforce ownership.
+
+Do not trust client-provided ownership IDs.
+
+Ensure database initialization is transactional where appropriate.
+
+---
+
+# PRIORITY 2 — RUN OF SHOW
+
+Rundown functionality must be excellent.
+
+Users must be able to:
+
+* add segment
+* edit segment
+* delete segment
+* reorder segments
+* duplicate where supported
+* set duration
+* set title
+* set speaker/name
+* set timer mode
+* set warning thresholds if supported
+* move directly between segments
+
+Preserve import functionality.
+
+If CSV/import already exists, make it reliable.
+
+If advanced scheduling functionality already exists, preserve it.
+
+---
+
+# PRIORITY 3 — TIMER
+
+The timer is mission-critical.
+
+Keep server-authoritative state.
+
+Never make browser-local ticking authoritative.
+
+Required:
+
+* countdown
+* count-up
+* overtime
+* start
+* pause
+* resume
+* reset
+* +1 minute
+* -1 minute
+* next segment
+
+Preserve additional timer modes if already implemented and stable.
+
+Timer must derive displayed state from authoritative timestamps/state.
+
+It must survive:
+
+* refresh
+* reconnect
+* temporary network loss
+* switching devices
+
+Timer controls must reject invalid transitions safely.
+
+---
+
+# PRIORITY 4 — MULTI-DEVICE SYNCHRONIZATION
+
+FlowLine should be demonstrably good at this.
+
+Test with at least:
+
+## Device A
+
+Operator
+
+## Device B
+
+Speaker display
+
+## Device C
+
+Stage/backstage display
+
+Changes must propagate quickly and accurately.
+
+Test:
+
+* start
+* pause
+* resume
+* reset
+* +1
+* -1
+* next segment
+* message
+* cue
+
+Then disconnect Device B from the network.
+
+Reconnect it.
+
+Expected:
+
+* it requests authoritative state
+* it catches up
+* no permanent drift
+* no duplicate timers
+* no stale state overwrites
+
+---
+
+# PRIORITY 5 — MULTIPLE OPERATORS
+
+If the existing architecture supports multiple operators, KEEP IT.
+
+Test:
+
+* Operator A opens Event
+* Operator B opens same Event
+* both observe same runtime
+* A changes timer
+* B receives update
+* stale mutations cannot silently overwrite newer state
+
+Do not remove concurrency/version protection.
+
+---
+
+# PRIORITY 6 — DISPLAYS
+
+Preserve the current display system.
+
+At minimum support:
+
+## Speaker
+
+Large timer.
+
+Optional existing fields:
+
+* current segment
+* speaker
+* next item
+* operator message
+
+## Stage / Backstage
+
+Can show more context:
+
+* current
+* next
+* rundown
+* cues/messages where appropriate
+
+If audience display already exists and works, keep it.
+
+All presentation displays must:
+
+* be fullscreen-friendly
+* work on phones/tablets/laptops/TV browsers
+* remain read-only
+* not expose operator controls
+* support reconnect
+
+---
+
+# PRIORITY 7 — PAIRING
+
+Preserve QR and short-code pairing.
+
+Make it easy:
+
+Operator:
+
+Add Display
+→ Choose Display Type
+→ QR + Pairing Code
+
+Guest:
+
+Open pair screen
+→ enter code or scan QR
+→ connected
+
+Security:
+
+* display credentials scoped
+* read-only
+* revocable
+* short code one-time
+* expired codes fail
+* invalid codes fail
+* display token cannot perform operator mutations
+
+---
+
+# PRIORITY 8 — MESSAGES AND CUES
+
+KEEP BOTH.
+
+Do not merge them.
+
+Messages:
+
+* text communication to display
+* examples: WRAP UP, 2 MINUTES, PLEASE FINISH
+
+Cues:
+
+* production signals
+* examples: STANDBY, GO, HOLD
+
+Test both across connected displays.
+
+---
+
+# PRIORITY 9 — SCHEDULE INTELLIGENCE
+
+If FlowLine already calculates schedule timing, KEEP IT.
+
+Useful outputs:
+
+* planned duration
+* actual duration
+* ahead/behind
+* projected finish
+
+Fix incorrect calculations.
+
+Do not replace deterministic scheduling with AI.
+
+AI can come later.
+
+---
+
+# PRIORITY 10 — HISTORY / REPORTING
+
+Preserve existing history.
+
+At minimum capture where architecture already supports it:
+
+* segment
+* start time
+* finish time
+* planned duration
+* actual duration
+
+If export/reporting exists, finish it rather than removing it.
+
+CSV export is useful.
+
+---
+
+# PRIORITY 11 — TEMPLATES
+
+Keep templates if present.
+
+Good initial examples:
+
+* Conference
+* Presentation
+* Public Meeting
+* Workout / Interval
+* Church Service
+* Panel
+
+Templates should simply initialize Events/rundowns.
+
+Do not fork product architecture per use case.
+
+---
+
+# PRIORITY 12 — WORKOUT USE CASE
+
+Do not build fitness tracking.
+
+Use existing timing engine.
+
+Example:
+
+Squats — 45 sec
+Rest — 15 sec
+Pushups — 45 sec
+Rest — 15 sec
+
+Display:
+
+Current exercise
+Timer
+Next exercise
+
+This should work naturally from the generic segment architecture.
+
+---
+
+# PRIORITY 13 — PUBLIC COMMENT / MEETING USE CASE
+
+Do not build municipal voting or agenda-management software.
+
+Support it through Event templates.
+
+Example:
+
+Public Comment
+Jane Smith
+3:00
+
+Display:
+
+Jane Smith
+2:47
+
+Warning at 30 sec.
+
+Overtime after zero.
+
+History records actual duration.
+
+---
+
+# PRIORITY 14 — BILLING
+
+Preserve Stripe/billing infrastructure.
+
+Audit it.
+
+Do not require payment during private-beta testing.
+
+If billing is already fully functional and safe, keep it accessible.
+
+If partially built:
+
+* do not delete it
+* prevent broken checkout UX
+* clearly separate beta access from future paid plans
+
+We will monetize after core reliability is proven.
+
+---
+
+# AUTHENTICATION
+
+Keep Clerk.
+
+Verify:
+
+* sign up
+* sign in
+* sign out
+* session persistence
+* protected API routes
+
+A logged-in User A must never be able to access User B's Event merely by changing an ID.
+
+Authorization belongs on the server.
+
+---
+
+# DATABASE
+
+Keep PostgreSQL + Drizzle.
+
+Audit:
+
+* schema consistency
+* migrations
+* foreign keys
+* cascade behavior
+* unique constraints
+* transaction boundaries
+* indexes
+* orphan cleanup
+
+Do not reset or destroy production data.
+
+Create forward-only migrations where schema changes are required.
+
+---
+
+# ERROR HANDLING
+
+Nothing important should fail silently.
+
+For user-visible failures:
+
+show a concise useful error.
+
+For server logs:
+
+include enough safe diagnostic detail to identify:
+
+* validation failure
+* auth failure
+* authorization failure
+* DB failure
+* network failure
+* timer conflict
+* pairing failure
+
+Never log:
+
+* passwords
+* Clerk tokens
+* session tokens
+* database credentials
+* Stripe secrets
+
+---
+
+# UI / UX
+
+The existing UI may be improved.
+
+Unlike earlier restrictions, you MAY polish or restructure UI where it clearly improves usability.
+
+However:
+
+DO NOT perform a gratuitous full visual redesign.
+
+Keep the product professional.
+
+Desired character:
+
+* dark-friendly
+* clean
+* modern
+* restrained
+* trustworthy
+* production-grade
+* readable from a distance
+
+The timer must dominate the operator/display experience.
+
+Controls must be obvious.
+
+Mobile controls must be touch-friendly.
+
+Do not bury critical functions.
+
+---
+
+# DASHBOARD
+
+The dashboard should immediately answer:
+
+What Events do I have?
+
+Primary CTA:
+
+**Create Event**
+
+Each Event should show useful basics:
+
+* name
+* date
+* venue
+* status
+
+Actions where supported:
+
+* open
+* duplicate
+* archive/delete
+
+Keep it simple.
+
+---
+
+# OPERATOR EXPERIENCE
+
+The operator workspace is the heart of the product.
+
+Recommended hierarchy:
+
+CURRENT SEGMENT
+
+very large timer
+
+segment title
+speaker
+
+primary controls
+
+START / PAUSE
+RESET
+-1 MIN
++1 MIN
+NEXT
+
+then rundown
+
+then communication/tools.
+
+Do not make operators hunt through tabs for common timer controls.
+
+---
+
+# MOBILE
+
+Test operator console on mobile.
+
+Must support:
+
+* starting timer
+* pausing
+* resuming
+* advancing
+* sending message
+* viewing current/next segment
+
+No horizontal scrolling for core controls.
+
+---
+
+# PERFORMANCE
+
+Do not prematurely optimize everything.
+
+Fix obvious issues:
+
+* massive unnecessary client bundles
+* duplicate requests
+* runaway polling
+* leaking realtime listeners
+* unnecessary rerenders
+* reconnect loops
+
+Prioritize correctness.
+
+---
+
+# TESTING
+
+Add or preserve automated tests for critical behavior.
+
+Highest priority:
+
+1. timer math
+2. timer transitions
+3. Event ownership
+4. Event CRUD
+5. rundown ordering
+6. pairing
+7. display authorization
+8. reconnect
+9. schedule math
+10. imports
+11. concurrency
+
+Use the project's existing test stack.
+
+Run the entire supported suite.
+
+---
+
+# MANUAL LAUNCH TEST
+
+Before calling this ready, conduct the following real workflow.
+
+## User
+
+Sign up.
+
+Create Event:
+
+`FlowLine Demo`
+
+Add:
+
+Welcome — 5:00
+Keynote — 30:00
+Q&A — 15:00
+
+## Operator
+
+Start Welcome.
+
+Pause.
+
+Resume.
+
+Add one minute.
+
+Remove one minute.
+
+Advance.
+
+## Speaker display
+
+Pair second device.
+
+Verify synchronized timer.
+
+Send:
+
+`2 MINUTES`
+
+Verify display.
+
+## Cue
+
+Send:
+
+`STANDBY`
+
+Then:
+
+`GO`
+
+Verify intended recipients.
+
+## Network
+
+Disconnect speaker display.
+
+Reconnect.
+
+Verify timer immediately catches up.
+
+## Refresh
+
+Refresh operator.
+
+Verify Event and runtime remain correct.
+
+## Second operator
+
+Open same Event in another authenticated window/device.
+
+Verify synchronization and conflict protection.
+
+## Finish
+
+Complete Event.
+
+Verify history/reporting where available.
+
+---
+
+# DEPLOYMENT
+
+Use the existing Replit deployment architecture.
+
+Get this project successfully deployed.
+
+Verify:
+
+* build
+* server startup
+* production DB
+* Clerk config
+* frontend API path
+* WebSocket/realtime behavior if applicable
+* health endpoint
+* environment secrets
+* HTTPS
+
+The launch URL must be usable from external phones/laptops.
+
+---
+
+# DO NOT STOP AT "CODE COMPILES"
+
+A green build is not launch readiness.
+
+The product must be manually usable end-to-end.
+
+If browser automation is available, use it.
+
+Actually interact with the application.
+
+Fix discovered issues.
+
+Repeat until the core workflow works.
+
+---
+
+# DO NOT ADD LARGE NEW ROADMAP FEATURES
+
+For this task, do NOT start building:
+
+* generative AI
+* AI schedule creation
+* Stream Deck
+* Companion
+* NDI
+* native desktop apps
+* advanced broadcast automation
+* complex organization management
+* audience Q&A platform
+* complex analytics
+
+Unless one of these already exists substantially, leave it for later.
+
+Existing advanced features should remain.
+
+New advanced features should wait.
+
+---
+
+# DEFINITION OF DONE
+
+FlowLine is launch-ready when a stranger can:
+
+1. Visit the live URL.
+2. Create an account.
+3. Create an Event.
+4. Build a rundown.
+5. Control the timer.
+6. Pair another device.
+7. See synchronized timing.
+8. Send messages/cues.
+9. Advance through the rundown.
+10. Refresh/reconnect without breaking state.
+11. Return later and find the Event.
+12. Use the product without developer intervention.
+
+---
+
+# FINAL REPORT
+
+Return a concise launch report:
+
+## Working features
+
+List everything confirmed working.
+
+## Fixed
+
+List real issues repaired.
+
+## Advanced features retained
+
+List valuable existing features preserved.
+
+## Database changes
+
+List migrations/schema changes.
+
+## Security
+
+PASS / FAIL
+
+## Auth
+
+PASS / FAIL
+
+## Event CRUD
+
+PASS / FAIL
+
+## Rundown
+
+PASS / FAIL
+
+## Timer
+
+PASS / FAIL
+
+## Multi-device synchronization
+
+PASS / FAIL
+
+## Display pairing
+
+PASS / FAIL
+
+## Messages
+
+PASS / FAIL
+
+## Cues
+
+PASS / FAIL
+
+## Reconnect
+
+PASS / FAIL
+
+## Multiple operators
+
+PASS / FAIL
+
+## History/reporting
+
+PASS / FAIL
+
+## Templates/import
+
+PASS / FAIL
+
+## Mobile
+
+PASS / FAIL
+
+## Typecheck
+
+PASS / FAIL
+
+## Tests
+
+PASS / FAIL
+
+## Build
+
+PASS / FAIL
+
+## Replit deployment
+
+PASS / FAIL
+
+## Live URL
+
+Provide it.
+
+## Remaining blockers
+
+Only actual blockers.
+
+End with exactly:
+
+`READY TO LAUNCH`
+
+or
+
+`NOT READY TO LAUNCH — <specific blockers>`
+
+Continue fixing launch blockers until the product satisfies the definition of done. Do not stop merely because the first implementation attempt compiles.

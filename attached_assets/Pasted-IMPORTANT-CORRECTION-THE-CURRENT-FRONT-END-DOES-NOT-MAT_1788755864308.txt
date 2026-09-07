@@ -1,0 +1,728 @@
+IMPORTANT CORRECTION — THE CURRENT FRONT END DOES NOT MATCH THE APPROVED STAGETIME DESIGN
+
+The current application is functionally useful, but the visual design is NOT the approved design.
+
+I want you to REPLACE the current user-facing interface with the approved StageTime visual system.
+
+This is not an optional polish pass.
+
+This is a full visual replacement of the existing frontend while preserving working backend functionality.
+
+APPROVED VISUAL REFERENCE
+
+Use this page as the primary design reference:
+
+https://designergpt.replit.app/pages/386b44c8867a83e757673116b84e75cc.html
+
+I have also uploaded the approved StageTime hero image into the repository.
+
+Use it as a local/static production asset.
+
+Do NOT use a temporary external signed image URL.
+
+SOURCE OF TRUTH
+
+For VISUAL DESIGN:
+
+The StageTime reference is the source of truth.
+
+For BACKEND FUNCTIONALITY:
+
+The existing application is the source of truth where the code is already production-quality.
+
+The final result must combine:
+
+* the existing working backend
+* the existing real timer functionality
+* existing authentication/billing/database logic where useful
+* the approved StageTime visual design
+
+Do NOT retain the old frontend just because it already exists.
+
+Do NOT merely change colors.
+
+Do NOT add the StageTime logo to the existing interface and call the redesign complete.
+
+Do NOT create a second marketing page while leaving the old application UI untouched.
+
+REPLACE THE ACTUAL PRODUCT UI.
+
+VISUAL STYLE
+
+The entire product must consistently use:
+
+* very dark navy/black backgrounds
+* cinematic blue/cyan lighting
+* premium event-production aesthetic
+* subtle glass/translucent surfaces
+* soft borders
+* deep shadows
+* rounded cards
+* large confident typography
+* Space Grotesk-style display typography
+* clean Inter-style body typography
+* blue/cyan gradients
+* restrained green/orange/red status colors
+* generous negative space
+* polished SaaS spacing
+* sophisticated rather than playful styling
+
+Avoid:
+
+* generic white SaaS dashboards
+* default Bootstrap appearance
+* default shadcn appearance
+* plain gray cards
+* excessive borders
+* excessive gradients
+* cartoonish icons
+* generic admin-template styling
+
+COLOR DIRECTION
+
+Use approximately:
+
+Background:
+#07111F
+
+Secondary dark background:
+#0C1727
+
+Panel background:
+rgba(13, 27, 46, 0.86)
+
+Primary text:
+#EEF6FF
+
+Secondary text:
+#A8BAD0
+
+Primary blue:
+#4DA3FF
+
+Cyan:
+#68E1FF
+
+Success green:
+#6BEA9C
+
+Warning orange:
+#FFB45E
+
+Critical red:
+#FF6B7A
+
+Borders:
+rgba(153, 190, 229, 0.16)
+
+Use gradients sparingly and professionally.
+
+TYPOGRAPHY
+
+Headings should visually resemble:
+
+Space Grotesk
+or another premium geometric sans-serif.
+
+Body copy should resemble:
+
+Inter
+or another clean neutral sans-serif.
+
+Large marketing headings should use tight tracking and bold weight.
+
+Do not use tiny generic dashboard typography everywhere.
+
+LANDING PAGE
+
+Rebuild the landing page to visually match the approved StageTime concept.
+
+Required structure:
+
+Sticky premium dark navigation.
+
+Brand:
+StageTime
+
+Navigation:
+Features
+Pricing
+Log in
+Get Started
+
+Hero:
+
+Eyebrow:
+LIVE EVENT TIMER PLATFORM
+
+Headline:
+
+Keep your event on track.
+Every time.
+
+“Every time.” should use the blue/cyan gradient treatment.
+
+Supporting copy should explain professional real-time timing for:
+
+* producers
+* speakers
+* venues
+* educators
+* teams
+
+Primary CTA:
+
+Start free
+
+Secondary CTA:
+
+Explore the product
+
+Trust notes:
+
+No credit card required
+Setup in minutes
+Secure cloud sync
+
+HERO VISUAL
+
+Use the approved StageTime hero image uploaded to the repository.
+
+Display it in a large cinematic rounded panel.
+
+Overlay a translucent timer card near the bottom.
+
+Example:
+
+MAIN STAGE • KEYNOTE
+
+00:12:34
+
+Use green/cyan timing accents.
+
+The image should feel integrated into the layout, not simply placed in a generic image card.
+
+FEATURE STRIP
+
+Immediately below the hero include premium compact feature cards:
+
+Real-time sync
+Built for teams
+Flexible control
+Beautiful displays
+Secure & reliable
+
+FEATURE SECTION
+
+Use six premium dark feature cards.
+
+Include concepts such as:
+
+Multiple timer modes
+
+Control from anywhere
+
+Venue-ready display mode
+
+Team collaboration
+
+Reconnect with confidence
+
+Fast operator workflows
+
+Cards should use restrained icon treatments and subtle lighting.
+
+DASHBOARD / OPERATOR CONTROL ROOM
+
+This is extremely important.
+
+Replace the current dashboard visual design with the approved StageTime control-room aesthetic.
+
+Use:
+
+dark sidebar
+
+dark main workspace
+
+large central timer
+
+premium status indicators
+
+clear session queue
+
+subtle borders
+
+blue/cyan highlights
+
+green connection-health indicator
+
+The central timer must be the visual focus.
+
+Example layout:
+
+StageTime sidebar
+
+Live Control
+Events
+Templates
+Team
+Billing
+Settings
+
+Top area:
+
+Leadership Summit
+Main Stage
+Live Sync Healthy
+
+Main timer:
+
+PRODUCT KEYNOTE
+
+00:10:00
+
+Controls:
+
+Start
+Pause
+Reset
+
+Then:
+
+Previous
+Opening Remarks
+
+Current
+Product Keynote
+
+Next
+Audience Q&A
+
+Use the real application's actual event/session data.
+
+Do not hardcode demo data in production.
+
+EVENT LIST
+
+Redesign the event list to match the StageTime system.
+
+Event cards should show:
+
+event name
+date
+venue
+status
+session count
+connected displays
+team/operator information
+
+Use polished status badges:
+
+Draft
+Ready
+Live
+Completed
+Archived
+
+Provide obvious actions:
+
+Open
+Duplicate
+Archive
+
+Do not overload every card with small buttons.
+
+EVENT EDITOR
+
+Use the same design system.
+
+Sections should include:
+
+Event details
+Sessions
+Branding
+Display
+Team
+History
+
+Use strong information hierarchy and generous spacing.
+
+SESSION EDITOR
+
+Each session should look like a professional timing cue.
+
+Include:
+
+title
+speaker
+duration
+timer mode
+warning threshold
+critical threshold
+notes
+display message
+
+Support drag/reorder visually.
+
+PUBLIC DISPLAY
+
+Make the public display extremely clean.
+
+No sidebar.
+No nav.
+No account controls.
+
+Only production-essential information.
+
+Centered timer.
+
+Large readable type.
+
+Session title.
+
+Optional speaker.
+
+Optional message.
+
+Warning and overtime states.
+
+Dark default stage background.
+
+Optional custom branding.
+
+Fullscreen-ready.
+
+PRICING
+
+Recreate the approved three-card pricing experience.
+
+Starter:
+$0/month
+
+Pro:
+$19/month
+
+Business:
+$59/month
+
+Pro should be visually emphasized as the recommended plan.
+
+Use the actual Stripe products/price IDs from backend configuration.
+
+Do not hardcode entitlement decisions in the frontend.
+
+LOGIN / SIGNUP
+
+Replace generic login/signup screens with StageTime-branded authentication.
+
+Use a centered premium dark card.
+
+Strong StageTime branding.
+
+Large clear heading.
+
+Minimal distractions.
+
+Responsive on mobile.
+
+BILLING
+
+Billing should visually match the rest of the product.
+
+Show:
+
+Current plan
+Monthly price
+Renewal date
+Payment status
+Upgrade
+Downgrade
+Manage billing
+
+Use the real Stripe subscription state.
+
+TEAM AREA
+
+Use StageTime styling for:
+
+Member list
+Pending invitations
+Roles
+Seat count
+Invite user
+Change role
+Remove member
+
+SETTINGS
+
+Use premium grouped settings sections.
+
+Avoid giant unstructured forms.
+
+COMPONENT SYSTEM
+
+Create/rework reusable components such as:
+
+StageTimeButton
+
+StageTimeCard
+
+StageTimeInput
+
+StageTimeModal
+
+StageTimeBadge
+
+TimerDisplay
+
+TimerControls
+
+SessionQueue
+
+ConnectionStatus
+
+EventCard
+
+PricingCard
+
+Sidebar
+
+TopNavigation
+
+EmptyState
+
+UpgradePrompt
+
+Toast
+
+ConfirmDialog
+
+Use the existing project framework.
+
+Do not introduce another frontend framework unless absolutely necessary.
+
+CSS / THEMING
+
+Create a centralized StageTime design token/theme system.
+
+Do not scatter arbitrary colors through hundreds of components.
+
+Centralize:
+
+colors
+spacing
+radius
+shadow
+typography
+status colors
+breakpoints
+transitions
+
+RESPONSIVE REQUIREMENTS
+
+Verify the redesigned application at:
+
+390px mobile
+768px tablet
+1440px desktop
+1920px production monitor
+
+Timer controls must be touch-friendly.
+
+Sidebar must adapt appropriately on mobile.
+
+Public display should scale fluidly to projector/venue resolutions.
+
+MOTION
+
+Use subtle motion only.
+
+Examples:
+
+soft hover transitions
+button feedback
+modal transitions
+connection-state transitions
+
+Respect:
+
+prefers-reduced-motion
+
+Do not create distracting animation during live operation.
+
+ACCESSIBILITY
+
+Maintain strong contrast.
+
+Provide visible focus styles.
+
+Use semantic HTML.
+
+Use correct labels.
+
+Do not rely exclusively on color to communicate timer status.
+
+STATUS COLORS
+
+Normal:
+white/blue
+
+Warning:
+orange
+
+Critical:
+red
+
+Healthy connection:
+green
+
+Disconnected:
+red
+
+Include readable text labels alongside status colors where appropriate.
+
+REMOVE OLD DESIGN
+
+After the StageTime design is implemented and working:
+
+remove obsolete old design components
+
+remove unused old stylesheets
+
+remove dead layout components
+
+remove old branding
+
+remove duplicate page implementations
+
+remove unused visual dependencies
+
+Do NOT leave two competing design systems in the repository.
+
+PRESERVE FUNCTIONALITY
+
+Do not break working:
+
+authentication
+
+database persistence
+
+timer engine
+
+WebSockets/realtime
+
+Stripe
+
+subscriptions
+
+permissions
+
+team logic
+
+event/session logic
+
+Only replace/refactor the presentation layer where possible.
+
+If backend changes are required to support the new UI, make them carefully.
+
+CRITICAL REQUIREMENT
+
+The redesign is NOT complete if only the homepage matches StageTime.
+
+The authenticated application must also visually match it.
+
+The following all need to feel like the same product:
+
+Marketing website
+Authentication
+Onboarding
+Dashboard
+Events
+Control room
+Sessions
+Display management
+Public display
+Templates
+Team
+Billing
+Settings
+
+SCREEN-BY-SCREEN REVIEW
+
+Before declaring completion, open and visually inspect every major route.
+
+Compare them against the StageTime design direction.
+
+If any page still looks like the old application, redesign it.
+
+FINAL QA
+
+After replacing the interface:
+
+run production build
+
+run type checking
+
+run tests
+
+test authentication
+
+test event creation
+
+test session creation
+
+test timer
+
+test realtime display
+
+test mobile layouts
+
+test Stripe billing
+
+check console errors
+
+check network errors
+
+check broken images
+
+verify the hero asset loads locally
+
+verify there are no temporary signed image URLs
+
+verify no old visual system remains
+
+GIT
+
+After successful implementation:
+
+inspect git diff
+
+verify no secrets
+
+commit the complete visual reconstruction
+
+use a commit message such as:
+
+feat: replace frontend with approved StageTime experience
+
+Then push to the existing connected origin/main.
+
+Do NOT force-push.
+
+If pushing fails, report the exact reason.
+
+FINAL REPORT
+
+When complete tell me:
+
+* which frontend files were replaced
+* which existing backend systems were preserved
+* which StageTime components were created
+* whether every major route was visually updated
+* whether the local hero image is being used
+* production build result
+* test result
+* commit hash
+* whether push to origin/main succeeded
+
+Do not say the redesign is complete unless the actual authenticated application visually matches the approved StageTime design.
