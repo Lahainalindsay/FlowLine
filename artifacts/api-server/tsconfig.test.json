@@ -10,6 +10,10 @@
     "src/lib/timer.ts",
     "src/lib/timer.test.ts",
     "src/lib/workspace-policy.ts",
-    "src/lib/workspace-policy.test.ts"
+    "src/lib/workspace-policy.test.ts",
+    "src/lib/billing.ts",
+    "src/lib/billing.test.ts",
+    "src/lib/stripeClient.ts",
+    "src/lib/webhookHandlers.test.ts"
   ]
 }

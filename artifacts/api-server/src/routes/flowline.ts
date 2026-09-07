@@ -70,10 +70,12 @@ import {
   workspaceInvitationsTable,
   workspacesTable,
 } from "@workspace/db";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { ensurePersonalWorkspace, getWorkspaceMembership, getWorkspacePlan, mayCreate, PLAN_ENTITLEMENTS, roleCan, type Permission } from "../lib/workspace";
 import { beginSse, publishSnapshots, sendSnapshot, subscribeOperator, subscribePublic } from "../lib/realtime";
 import { createSessionTransition, projectSession } from "../lib/timer";
+import { billingEntitlementFlags, decideCheckoutAttempt, hasManagedStripeSubscription, isPaidPlan, safeReturnUrl, selectOfficialPlanPrice, type PaidPlan } from "../lib/billing";
+import { stripeProxy } from "../lib/stripeClient";
 
 const router: IRouter = Router();
 
@@ -1012,7 +1014,126 @@ router.get("/billing", async (req, res) => {
   if (!await personalMembership(res.locals.userId, workspaceId, "billing:read")) { res.status(403).json({ error: "Billing access denied" }); return; }
   const [subscription] = await db.select().from(subscriptionsTable).where(eq(subscriptionsTable.workspaceId, workspaceId)).limit(1);
   const plan = subscription?.plan ?? "STARTER";
-  res.json(GetBillingEntitlementResponse.parse({ plan, status: subscription?.status ?? "active", entitlements: PLAN_ENTITLEMENTS[plan], upgradesAvailable: false }));
+  const managed = hasManagedStripeSubscription(subscription);
+  const catalogHealthy = managed ? false : await Promise.all([stageTimePrice("PRO"), stageTimePrice("BUSINESS")]).then(() => true, () => false);
+  res.json(GetBillingEntitlementResponse.parse({ plan, status: subscription?.status ?? "active", entitlements: PLAN_ENTITLEMENTS[plan], ...billingEntitlementFlags(subscription ?? null, catalogHealthy) }));
+});
+
+async function stageTimePrice(plan: PaidPlan) {
+  const products = await stripeProxy.listProducts() as { data?: any[] };
+  const prices = await stripeProxy.listPrices() as { data?: any[] };
+  const price = selectOfficialPlanPrice(plan, products.data ?? [], prices.data ?? []);
+  if (!price) throw new Error(`Stripe catalog must contain exactly one official price for ${plan}.`);
+  return price.id;
+}
+
+function requestOrigin(req: { protocol: string; get(name: string): string | undefined }) {
+  const host = req.get("host");
+  if (!host) throw new Error("Request host is required.");
+  return `${req.protocol}://${host}`;
+}
+
+function safeErrorDetails(error: unknown) {
+  return error instanceof Error
+    ? { errorType: error.constructor.name, errorMessage: error.message }
+    : { errorType: typeof error, errorMessage: "Unknown billing error" };
+}
+
+async function allocateCheckoutAttempt(workspaceId: string, plan: PaidPlan) {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT id FROM flowline_subscriptions WHERE workspace_id = ${workspaceId} FOR UPDATE`);
+    const [subscription] = await tx.select().from(subscriptionsTable).where(eq(subscriptionsTable.workspaceId, workspaceId)).limit(1);
+    if (!subscription) throw new Error("Workspace subscription row is missing.");
+    if (hasManagedStripeSubscription(subscription)) return { action: "managed" as const, subscription };
+    const decision = decideCheckoutAttempt({
+      attemptId: subscription.checkoutAttemptId,
+      requestedPlan: subscription.checkoutRequestedPlan,
+      sessionId: subscription.checkoutSessionId,
+      expiresAt: subscription.checkoutAttemptExpiresAt,
+    }, plan, new Date());
+    if (decision.action !== "allocate") return { ...decision, subscription };
+    const attemptId = randomUUID();
+    const [updated] = await tx.update(subscriptionsTable).set({
+      checkoutAttemptId: attemptId, checkoutRequestedPlan: plan, checkoutSessionId: null,
+      checkoutAttemptExpiresAt: new Date(Date.now() + 31 * 60_000),
+    }).where(eq(subscriptionsTable.workspaceId, workspaceId)).returning();
+    return { action: "create" as const, attemptId, subscription: updated };
+  });
+}
+
+async function replaceExpiredCheckoutAttempt(workspaceId: string, plan: PaidPlan, oldAttemptId: string) {
+  return db.transaction(async (tx) => {
+    await tx.execute(sql`SELECT id FROM flowline_subscriptions WHERE workspace_id = ${workspaceId} FOR UPDATE`);
+    const [subscription] = await tx.select().from(subscriptionsTable).where(eq(subscriptionsTable.workspaceId, workspaceId)).limit(1);
+    if (subscription?.checkoutAttemptId !== oldAttemptId) return null;
+    const attemptId = randomUUID();
+    await tx.update(subscriptionsTable).set({ checkoutAttemptId: attemptId, checkoutRequestedPlan: plan, checkoutSessionId: null, checkoutAttemptExpiresAt: new Date(Date.now() + 31 * 60_000) }).where(eq(subscriptionsTable.workspaceId, workspaceId));
+    return attemptId;
+  });
+}
+
+router.post("/billing/checkout", async (req, res) => {
+  const workspaceId = res.locals.personalWorkspaceId as string;
+  if (!await personalMembership(res.locals.userId, workspaceId, "billing:manage")) { res.status(403).json({ error: "Billing access denied" }); return; }
+  const plan = req.body?.plan;
+  if (!isPaidPlan(plan)) { res.status(400).json({ error: "Plan must be PRO or BUSINESS." }); return; }
+  try {
+    const origin = requestOrigin(req);
+    const successUrl = safeReturnUrl(req.body?.successUrl, origin);
+    const cancelUrl = safeReturnUrl(req.body?.cancelUrl, origin);
+    if (!successUrl || !cancelUrl) { res.status(400).json({ error: "Return URLs must use this application's origin." }); return; }
+    let allocation = await allocateCheckoutAttempt(workspaceId, plan);
+    if (allocation.action === "managed") { res.status(409).json({ error: "This workspace has an existing Stripe subscription. Use Customer Portal to manage or resolve its billing state." }); return; }
+    if (allocation.action === "conflict") { res.status(409).json({ error: "A Checkout attempt for another plan is still pending. Complete it or try again after it expires." }); return; }
+    if (allocation.action === "retrieve") {
+      const existing = await stripeProxy.getCheckoutSession(allocation.sessionId!) as { id: string; status?: string; url?: string; expires_at?: number };
+      if (existing.status === "open" && existing.url) { res.json({ url: existing.url }); return; }
+      if (existing.status === "complete") { res.status(409).json({ error: "Checkout completed and subscription reconciliation is pending. Refresh billing or use Customer Portal." }); return; }
+      const replacement = await replaceExpiredCheckoutAttempt(workspaceId, plan, allocation.attemptId!);
+      allocation = replacement ? { action: "create" as const, attemptId: replacement, subscription: allocation.subscription } : await allocateCheckoutAttempt(workspaceId, plan);
+      if (allocation.action !== "create") { res.status(409).json({ error: "Checkout state changed. Retry this request." }); return; }
+    }
+    const subscription = allocation.subscription;
+    const priceId = await stageTimePrice(plan);
+    let customerId = subscription?.stripeCustomerId ?? null;
+    if (!customerId) {
+      const [user] = await db.select({ email: appUsersTable.email }).from(appUsersTable).where(eq(appUsersTable.clerkUserId, res.locals.userId)).limit(1);
+      const customer = await stripeProxy.createCustomer({ email: user?.email, metadata: { workspaceId } }) as { id: string };
+      const [claimed] = await db.update(subscriptionsTable).set({ stripeCustomerId: customer.id })
+        .where(and(eq(subscriptionsTable.workspaceId, workspaceId), isNull(subscriptionsTable.stripeCustomerId))).returning({ stripeCustomerId: subscriptionsTable.stripeCustomerId });
+      if (claimed?.stripeCustomerId) customerId = claimed.stripeCustomerId;
+      else {
+        const [current] = await db.select({ stripeCustomerId: subscriptionsTable.stripeCustomerId }).from(subscriptionsTable).where(eq(subscriptionsTable.workspaceId, workspaceId)).limit(1);
+        if (!current?.stripeCustomerId) throw new Error("Unable to associate Stripe customer with workspace.");
+        customerId = current.stripeCustomerId;
+      }
+    }
+    const session = await stripeProxy.createCheckoutSession({ mode: "subscription", customer: customerId, automatic_tax: { enabled: true }, line_items: [{ price: priceId, quantity: 1 }], success_url: successUrl, cancel_url: cancelUrl, client_reference_id: workspaceId, metadata: { workspaceId, stagetime_plan: plan }, subscription_data: { metadata: { workspaceId, stagetime_plan: plan } } }, `stagetime:${workspaceId}:${allocation.attemptId}`) as { id: string; url?: string; expires_at?: number };
+    if (!session.url) throw new Error("Stripe did not return a Checkout URL.");
+    const [persisted] = await db.update(subscriptionsTable).set({ checkoutSessionId: session.id, checkoutAttemptExpiresAt: session.expires_at ? new Date(session.expires_at * 1000) : new Date(Date.now() + 31 * 60_000) })
+      .where(and(eq(subscriptionsTable.workspaceId, workspaceId), eq(subscriptionsTable.checkoutAttemptId, allocation.attemptId))).returning({ id: subscriptionsTable.id });
+    if (!persisted) throw new Error("Checkout attempt changed before the Stripe session could be persisted.");
+    res.json({ url: session.url });
+  } catch (error) {
+    req.log.error({ ...safeErrorDetails(error), workspaceId }, "Unable to create Stripe Checkout session");
+    res.status(503).json({ error: "Billing checkout is unavailable." });
+  }
+});
+
+router.post("/billing/portal", async (req, res) => {
+  const workspaceId = res.locals.personalWorkspaceId as string;
+  if (!await personalMembership(res.locals.userId, workspaceId, "billing:manage")) { res.status(403).json({ error: "Billing access denied" }); return; }
+  const [subscription] = await db.select().from(subscriptionsTable).where(eq(subscriptionsTable.workspaceId, workspaceId)).limit(1);
+  if (!subscription?.stripeCustomerId) { res.status(409).json({ error: "No Stripe customer exists for this workspace." }); return; }
+  try {
+    const returnUrl = safeReturnUrl(req.body?.returnUrl, requestOrigin(req));
+    if (!returnUrl) { res.status(400).json({ error: "Return URL must use this application's origin." }); return; }
+    const session = await stripeProxy.createPortalSession({ customer: subscription.stripeCustomerId, return_url: returnUrl }) as { url: string };
+    res.json({ url: session.url });
+  } catch (error) {
+    req.log.error({ ...safeErrorDetails(error), workspaceId }, "Unable to create Stripe portal session");
+    res.status(503).json({ error: "Billing portal is unavailable." });
+  }
 });
 
 export default router;

@@ -57,12 +57,31 @@ export const subscriptionsTable = pgTable("flowline_subscriptions", {
     .references(() => workspacesTable.id),
   plan: text("plan").$type<SubscriptionPlan>().notNull().default("STARTER"),
   status: text("status").notNull().default("active"),
+  // These are relationship references only; Stripe remains the subscription
+  // source of truth and is synchronized into its managed `stripe` schema.
+  stripeCustomerId: text("stripe_customer_id"),
+  stripeSubscriptionId: text("stripe_subscription_id"),
+  checkoutAttemptId: text("checkout_attempt_id"),
+  checkoutRequestedPlan: text("checkout_requested_plan").$type<SubscriptionPlan>(),
+  checkoutSessionId: text("checkout_session_id"),
+  checkoutAttemptExpiresAt: timestamp("checkout_attempt_expires_at", { withTimezone: true }),
   currentPeriodEndsAt: timestamp("current_period_ends_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
 }, (table) => [
   uniqueIndex("flowline_subscriptions_workspace_unique").on(table.workspaceId),
+  uniqueIndex("flowline_subscriptions_stripe_customer_unique").on(table.stripeCustomerId),
+  uniqueIndex("flowline_subscriptions_stripe_subscription_unique").on(table.stripeSubscriptionId),
 ]);
+
+/** Durable replay ledger for canonical Stripe webhook events. */
+export const stripeWebhookEventsTable = pgTable("flowline_stripe_webhook_events", {
+  eventId: text("event_id").primaryKey(),
+  eventType: text("event_type").notNull(),
+  stripeCreatedAt: timestamp("stripe_created_at", { withTimezone: true }).notNull(),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const timerTemplatesTable = pgTable("flowline_timer_templates", {
   id: text("id").primaryKey(),
@@ -136,6 +155,7 @@ export type AppUser = typeof appUsersTable.$inferSelect;
 export type Workspace = typeof workspacesTable.$inferSelect;
 export type WorkspaceMember = typeof workspaceMembersTable.$inferSelect;
 export type Subscription = typeof subscriptionsTable.$inferSelect;
+export type StripeWebhookEvent = typeof stripeWebhookEventsTable.$inferSelect;
 export type TimerTemplate = typeof timerTemplatesTable.$inferSelect;
 export type WorkspaceInvitation = typeof workspaceInvitationsTable.$inferSelect;
 export type AuditLog = typeof auditLogsTable.$inferSelect;

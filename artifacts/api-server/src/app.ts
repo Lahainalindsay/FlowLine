@@ -5,6 +5,7 @@ import { clerkMiddleware } from "@clerk/express";
 import { publishableKeyFromHost } from "@clerk/shared/keys";
 import router from "./routes";
 import { logger } from "./lib/logger";
+import { WebhookHandlers } from "./lib/webhookHandlers";
 import {
   CLERK_PROXY_PATH,
   clerkProxyMiddleware,
@@ -12,6 +13,11 @@ import {
 } from "./middlewares/clerkProxyMiddleware";
 
 const app: Express = express();
+
+// StageTime is reached through exactly one Replit reverse-proxy hop. Trusting
+// only that hop allows req.protocol to honor X-Forwarded-Proto without
+// accepting arbitrary multi-proxy forwarding headers.
+app.set("trust proxy", 1);
 
 app.use(
   pinoHttp({
@@ -34,6 +40,17 @@ app.use(
 );
 app.use(CLERK_PROXY_PATH, clerkProxyMiddleware());
 app.use(cors({ credentials: true, origin: true }));
+app.post("/api/stripe/webhook", express.raw({ type: "application/json" }), async (req, res) => {
+  const signature = req.headers["stripe-signature"];
+  if (!signature) { res.status(400).json({ error: "Missing webhook signature" }); return; }
+  try {
+    await WebhookHandlers.processWebhook(req.body as Buffer, Array.isArray(signature) ? signature[0] : signature, req.log);
+    res.status(200).json({ received: true });
+  } catch (error) {
+    req.log.warn({ error }, "Rejected Stripe webhook");
+    res.status(400).json({ error: "Invalid webhook" });
+  }
+});
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(
