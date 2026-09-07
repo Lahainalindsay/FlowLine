@@ -6,9 +6,8 @@ import {
   getListEventsQueryKey,
   getGetDashboardSummaryQueryKey
 } from '@workspace/api-client-react';
-import { Shell } from '../components/layout';
-import { Button, Card, Input, Label, Select } from '../components/ui';
-import { ArrowLeft, ArrowRight, Loader2 } from 'lucide-react';
+import { StageTimeLayout, StageTimeCard, StageTimeButton, StageTimeInput, StageTimeLabel, StageTimeSelect } from '../components/stagetime';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
 
 export default function NewEvent() {
   const [, setLocation] = useLocation();
@@ -36,43 +35,45 @@ export default function NewEvent() {
   };
 
   return (
-    <Shell>
+    <StageTimeLayout>
       <div className="max-w-3xl mx-auto fade-up">
-        <Link href="/" className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white mb-8 transition-colors">
-          <ArrowLeft className="h-3 w-3" /> Return to Command Center
+        <Link href="/" className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[var(--color-stagetime-text-dim)] hover:text-[var(--color-stagetime-cyan)] mb-10 transition-colors">
+          <ArrowLeft className="h-4 w-4" /> Command Center
         </Link>
 
-        <div className="mb-10">
-          <div className="mono text-[10px] uppercase tracking-[0.2em] text-cyan-400 font-bold mb-3">Provision Workspace</div>
-          <h1 className="text-4xl font-bold tracking-tight text-white mb-3">New Production</h1>
-          <p className="text-slate-400">Initialize a new event workspace for your crew.</p>
+        <div className="mb-12">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--color-stagetime-blue)]/10 border border-[var(--color-stagetime-blue)]/20 text-[var(--color-stagetime-cyan)] text-[10px] font-bold uppercase tracking-[0.2em] mb-4">
+            Workspace Init
+          </div>
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-white display-font mb-4">New Production</h1>
+          <p className="text-[var(--color-stagetime-text-dim)] text-lg">Initialize a new event workspace for your crew.</p>
         </div>
 
-        <Card className="p-6 md:p-10">
-          <form onSubmit={submit} className="space-y-6">
+        <StageTimeCard className="p-8 md:p-12 border-[var(--color-stagetime-blue)]/20 bg-[rgba(13,27,46,0.6)] backdrop-blur-xl shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+          <form onSubmit={submit} className="space-y-8">
             <div>
-              <Label hint="Visible to the entire control room">Production Name</Label>
-              <Input
+              <StageTimeLabel hint="Visible to the entire control room">Production Name</StageTimeLabel>
+              <StageTimeInput
                 autoFocus
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 placeholder="e.g. Global Tech Summit 2024"
-                className="text-lg py-6"
+                className="text-lg py-7 px-5"
               />
             </div>
 
-            <div className="grid md:grid-cols-2 gap-6">
+            <div className="grid md:grid-cols-2 gap-8">
               <div>
-                <Label>Event Date</Label>
-                <Input
+                <StageTimeLabel>Event Date</StageTimeLabel>
+                <StageTimeInput
                   type="date"
                   value={form.date}
                   onChange={(e) => setForm({ ...form, date: e.target.value })}
                 />
               </div>
               <div>
-                <Label>Time Zone</Label>
-                <Select
+                <StageTimeLabel>Time Zone</StageTimeLabel>
+                <StageTimeSelect
                   value={form.timezone}
                   onChange={(e) => setForm({ ...form, timezone: e.target.value })}
                 >
@@ -80,13 +81,13 @@ export default function NewEvent() {
                   <option value="America/New_York">Eastern Time (ET)</option>
                   <option value="Europe/London">Greenwich Mean Time (GMT)</option>
                   <option value="Asia/Tokyo">Japan Standard Time (JST)</option>
-                </Select>
+                </StageTimeSelect>
               </div>
             </div>
 
             <div>
-              <Label hint="Optional">Venue / Location</Label>
-              <Input
+              <StageTimeLabel hint="Optional">Venue / Location</StageTimeLabel>
+              <StageTimeInput
                 value={form.venue}
                 onChange={(e) => setForm({ ...form, venue: e.target.value })}
                 placeholder="e.g. Main Hall, Moscone Center"
@@ -94,22 +95,22 @@ export default function NewEvent() {
             </div>
 
             {error && (
-              <div className="rounded-lg bg-red-500/10 border border-red-500/20 p-4 text-sm font-medium text-red-400">
-                {error}
+              <div className="rounded-xl bg-[var(--color-stagetime-red)]/10 border border-[var(--color-stagetime-red)]/20 p-5 text-sm font-medium text-[var(--color-stagetime-red)] flex items-center gap-3">
+                <span className="h-2 w-2 rounded-full bg-[var(--color-stagetime-red)]" /> {error}
               </div>
             )}
 
-            <div className="pt-6 mt-8 border-t border-white/10 flex items-center justify-end gap-4">
+            <div className="pt-8 mt-10 border-t border-[var(--color-stagetime-border)] flex items-center justify-end gap-5">
               <Link href="/">
-                <Button type="button" variant="ghost">Cancel</Button>
+                <StageTimeButton type="button" variant="ghost">Cancel</StageTimeButton>
               </Link>
-              <Button type="submit" variant="primary" loading={create.isPending}>
-                Provision Workspace <ArrowRight className="h-4 w-4 ml-1" />
-              </Button>
+              <StageTimeButton type="submit" variant="primary" size="lg" loading={create.isPending}>
+                Provision Workspace <ArrowRight className="h-5 w-5 ml-2" />
+              </StageTimeButton>
             </div>
           </form>
-        </Card>
+        </StageTimeCard>
       </div>
-    </Shell>
+    </StageTimeLayout>
   );
 }

@@ -1,9 +1,9 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ClerkProvider, RedirectToSignIn, useAuth } from '@clerk/react';
+import { ClerkProvider, useAuth } from '@clerk/react';
 import { publishableKeyFromHost } from '@clerk/react/internal';
 import { dark } from '@clerk/themes';
-import { Route, Switch, Router as WouterRouter } from 'wouter';
+import { Redirect, Route, Switch, Router as WouterRouter } from 'wouter';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 
@@ -29,20 +29,28 @@ const clerkPubKey = publishableKeyFromHost(window.location.hostname, import.meta
 const clerkAppearance = {
   baseTheme: dark,
   variables: {
-    colorPrimary: '#00E5FF',
-    colorBackground: '#0B0F19',
-    colorInputBackground: '#141A26',
-    colorInputText: '#F8FAFC',
-    colorText: '#F8FAFC',
-    colorTextSecondary: '#94A3B8',
-    fontFamily: 'Outfit, sans-serif',
+    colorPrimary: '#4DA3FF',
+    colorBackground: '#0C1727',
+    colorInputBackground: 'rgba(0,0,0,0.2)',
+    colorInputText: '#EEF6FF',
+    colorText: '#EEF6FF',
+    colorTextSecondary: '#A8BAD0',
+    fontFamily: 'Inter, sans-serif',
     borderRadius: '0.75rem',
   },
   elements: {
-    card: 'border border-white/10 shadow-2xl bg-[#0B0F19]/90 backdrop-blur-xl',
-    formButtonPrimary: 'bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-bold',
-    formFieldInput: 'border-white/10 focus:border-cyan-500',
-    footerActionLink: 'text-cyan-400 hover:text-cyan-300',
+    card: '!border !border-[rgba(153,190,229,0.16)] !shadow-2xl !bg-[rgba(13,27,46,0.94)] backdrop-blur-xl',
+    headerTitle: '!text-[#EEF6FF]',
+    headerSubtitle: '!text-[#A8BAD0]',
+    socialButtonsBlockButton: '!border-[rgba(153,190,229,0.16)] !bg-[rgba(7,17,31,0.72)] !text-[#EEF6FF] hover:!bg-[rgba(77,163,255,0.12)]',
+    socialButtonsBlockButtonText: '!text-[#EEF6FF]',
+    dividerLine: '!bg-[rgba(153,190,229,0.16)]',
+    dividerText: '!text-[#A8BAD0]',
+    formFieldLabel: '!text-[#EEF6FF]',
+    formFieldInput: '!border-[rgba(153,190,229,0.24)] !bg-[rgba(7,17,31,0.82)] !text-[#EEF6FF] placeholder:!text-[#A8BAD0] focus:!border-[#4DA3FF] focus:!ring-[#4DA3FF]',
+    formButtonPrimary: '!bg-[#4DA3FF] hover:!bg-[#68E1FF] !text-[#07111F] font-bold shadow-[0_0_15px_rgba(77,163,255,0.35)]',
+    footerActionText: '!text-[#A8BAD0]',
+    footerActionLink: '!text-[#4DA3FF] hover:!text-[#68E1FF]',
   }
 };
 
@@ -65,7 +73,7 @@ function ProtectedRoute({ component: Component, ...props }: { component: React.C
         <Component {...props} />
       </SignedIn>
       <SignedOut>
-        <RedirectToSignIn />
+        <Redirect to="/sign-in" />
       </SignedOut>
     </>
   );
@@ -85,6 +93,9 @@ export default function App() {
                 </>
               )} />
 
+              <Route path="/events" component={() => (
+                <ProtectedRoute component={Dashboard} />
+              )} />
               <Route path="/app" component={() => (
                 <ProtectedRoute component={Dashboard} />
               )} />

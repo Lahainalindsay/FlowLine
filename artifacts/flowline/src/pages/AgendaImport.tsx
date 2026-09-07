@@ -5,10 +5,8 @@ import {
   useGetEvent, getGetEventQueryKey,
   usePreviewAgendaImport, useApplyAgendaImport, getListAgendaItemsQueryKey
 } from '@workspace/api-client-react';
-import { Shell } from '../components/layout';
-import { Button, Card, Badge } from '../components/ui';
+import { StageTimeLayout, StageTimeCard, StageTimeButton, StageTimeBadge } from '../components/stagetime';
 import { ArrowLeft, Check, RotateCcw, Zap, TriangleAlert, Loader2 } from 'lucide-react';
-import { cn } from '../lib/utils';
 
 export default function AgendaImport() {
   const { eventId = '' } = useParams<{ eventId: string }>();
@@ -24,22 +22,22 @@ export default function AgendaImport() {
 
   if (q.isLoading) {
     return (
-      <Shell>
-        <div className="flex flex-col h-[50vh] items-center justify-center text-slate-400 gap-4">
-          <Loader2 className="h-8 w-8 animate-spin text-cyan-500" />
+      <StageTimeLayout>
+        <div className="flex flex-col h-[50vh] items-center justify-center text-[var(--color-stagetime-text-dim)] gap-4">
+          <Loader2 className="h-8 w-8 animate-spin text-[var(--color-stagetime-blue)]" />
         </div>
-      </Shell>
+      </StageTimeLayout>
     );
   }
 
   if (q.isError || !q.data) {
     return (
-      <Shell>
-        <Card className="p-8 text-center max-w-md mx-auto mt-20 border-red-500/20">
-          <div className="text-red-400 font-bold mb-2">Signal Lost</div>
-          <Button variant="outline" onClick={() => q.refetch()}>Retry</Button>
-        </Card>
-      </Shell>
+      <StageTimeLayout>
+        <StageTimeCard className="p-8 text-center max-w-md mx-auto mt-20 border-[var(--color-stagetime-red)]/30 bg-[var(--color-stagetime-red)]/5">
+          <div className="text-[var(--color-stagetime-red)] font-bold display-font mb-2">Signal Lost</div>
+          <StageTimeButton variant="outline" onClick={() => q.refetch()}>Retry</StageTimeButton>
+        </StageTimeCard>
+      </StageTimeLayout>
     );
   }
 
@@ -47,35 +45,38 @@ export default function AgendaImport() {
   const p = preview.data;
 
   return (
-    <Shell>
+    <StageTimeLayout>
       <div className="fade-up mx-auto max-w-4xl">
-        <Link href={`/events/${event.id}`} className="mb-8 inline-flex items-center gap-2 text-xs font-bold text-slate-400 hover:text-white transition-colors">
+        <Link href={`/events/${event.id}`} className="mb-10 inline-flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-[var(--color-stagetime-text-dim)] hover:text-[var(--color-stagetime-cyan)] transition-colors">
           <ArrowLeft className="h-4 w-4" /> Return to Workspace
         </Link>
 
-        <div className="mb-8">
-          <div className="mono text-[10px] uppercase tracking-[0.2em] text-cyan-400 font-bold mb-3">Data Operations</div>
-          <h1 className="text-3xl font-bold tracking-tight text-white mb-2">Import Schedule</h1>
-          <p className="text-slate-400">Paste your show flow text. The system will automatically extract timing blocks.</p>
+        <div className="mb-12">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--color-stagetime-blue)]/10 border border-[var(--color-stagetime-blue)]/20 text-[var(--color-stagetime-cyan)] text-[10px] font-bold uppercase tracking-[0.2em] mb-4">
+            Data Operations
+          </div>
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-white display-font mb-4">Import Schedule</h1>
+          <p className="text-[var(--color-stagetime-text-dim)] text-lg">Paste your show flow text. The system will automatically extract timing blocks.</p>
         </div>
 
         {!p ? (
-          <Card className="p-6">
+          <StageTimeCard className="p-8 md:p-12 border-[var(--color-stagetime-blue)]/20 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
             <textarea
               autoFocus
-              className="min-h-[300px] w-full resize-y rounded-xl border border-white/10 bg-black/40 p-6 text-sm font-medium text-white outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 transition-colors"
+              className="min-h-[350px] w-full resize-y rounded-xl border border-[var(--color-stagetime-border)] bg-[rgba(0,0,0,0.3)] p-6 text-base font-medium text-white outline-none focus:border-[var(--color-stagetime-blue)] focus:ring-1 focus:ring-[var(--color-stagetime-blue)] transition-colors font-mono shadow-inner"
               placeholder="e.g.&#10;09:00 Opening Remarks (15m)&#10;09:15 Keynote: Future of Tech - Sarah (45m)"
               value={text}
               onChange={(e) => setText(e.target.value)}
             />
             {error && (
-              <div className="mt-4 rounded-lg border border-red-500/20 bg-red-500/10 p-4 text-sm font-medium text-red-400">
-                {error}
+              <div className="mt-6 rounded-xl border border-[var(--color-stagetime-red)]/20 bg-[var(--color-stagetime-red)]/10 p-5 text-sm font-medium text-[var(--color-stagetime-red)] flex items-center gap-3">
+                <span className="h-2 w-2 rounded-full bg-[var(--color-stagetime-red)]" /> {error}
               </div>
             )}
-            <div className="mt-6 flex justify-end">
-              <Button
+            <div className="mt-8 flex justify-end">
+              <StageTimeButton
                 variant="primary"
+                size="lg"
                 disabled={!text || preview.isPending}
                 loading={preview.isPending}
                 onClick={() => {
@@ -86,52 +87,66 @@ export default function AgendaImport() {
                   );
                 }}
               >
-                <Zap className="h-4 w-4 mr-2" /> Extract Blocks
-              </Button>
+                <Zap className="h-5 w-5 mr-2" /> Extract Blocks
+              </StageTimeButton>
             </div>
-          </Card>
+          </StageTimeCard>
         ) : (
-          <Card className="p-6">
-            <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-6">
-              <div className="flex items-center gap-4">
-                <Badge variant={p.confidence === 'high' ? 'good' : p.confidence === 'medium' ? 'warn' : 'outline'}>
+          <StageTimeCard className="p-8 md:p-12 border-[var(--color-stagetime-blue)]/30 bg-[rgba(13,27,46,0.6)] backdrop-blur-xl shadow-[0_0_50px_rgba(77,163,255,0.1)]">
+            <div className="mb-10 flex flex-col md:flex-row md:items-center justify-between gap-6 border-b border-[var(--color-stagetime-border)] pb-8">
+              <div className="flex items-center gap-5">
+                <StageTimeBadge variant={p.confidence === 'high' ? 'good' : p.confidence === 'medium' ? 'warn' : 'outline'} className="px-4 py-1.5 text-xs">
                   {p.confidence} Confidence
-                </Badge>
-                <span className="text-sm font-bold text-white">{p.items.length} Blocks Extracted</span>
+                </StageTimeBadge>
+                <span className="text-base font-bold text-white display-font">{p.items.length} Blocks Extracted</span>
               </div>
-              <Button variant="ghost" onClick={() => preview.reset()}>
-                <RotateCcw className="h-4 w-4 mr-1" /> Restart
-              </Button>
+              <StageTimeButton variant="ghost" onClick={() => preview.reset()}>
+                <RotateCcw className="h-4 w-4 mr-2" /> Restart
+              </StageTimeButton>
             </div>
 
             {p.warnings.length > 0 && (
-              <div className="mb-8 space-y-2 rounded-lg border border-amber-500/20 bg-amber-500/10 p-5">
+              <div className="mb-10 space-y-3 rounded-xl border border-[var(--color-stagetime-orange)]/30 bg-[var(--color-stagetime-orange)]/10 p-6 shadow-inner">
                 {p.warnings.map((w, i) => (
-                  <div key={i} className="flex items-start gap-3 text-sm text-amber-400">
+                  <div key={i} className="flex items-start gap-3 text-sm text-[var(--color-stagetime-orange)] font-medium">
                     <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0" /> {w}
                   </div>
                 ))}
               </div>
             )}
 
-            <div className="space-y-3 mb-8">
+            <div className="space-y-3 mb-10">
               {p.items.map((item, i) => (
-                <div key={i} className="flex gap-4 rounded-xl bg-black/30 p-4 border border-white/5">
-                  <div className="mono w-8 text-slate-500 text-xs mt-0.5">{String(i + 1).padStart(2,'0')}</div>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-bold text-white text-base">{item.title}</div>
-                    <div className="mt-1 text-sm text-slate-400">{item.speaker || item.type} <span className="mx-2 opacity-50">•</span> <span className="text-cyan-400 font-mono">{item.plannedDurationMinutes}m</span></div>
+                <div key={i} className="flex gap-4 rounded-xl bg-[rgba(0,0,0,0.2)] p-5 border border-[var(--color-stagetime-border)]">
+                  <div className="mono w-8 text-[var(--color-stagetime-text-dim)] text-xs mt-1 font-bold">{String(i + 1).padStart(2,'0')}</div>
+                  <div className="min-w-0 flex-1 grid sm:grid-cols-2 gap-4">
+                    <div>
+                      <div className="font-bold text-white text-lg display-font">{item.title}</div>
+                      <div className="mt-1 text-sm text-[var(--color-stagetime-text-dim)]">{item.speaker || item.type}</div>
+                    </div>
+                    <div className="flex sm:justify-end items-center">
+                      <div className="mono text-xs uppercase font-bold text-[var(--color-stagetime-cyan)] tracking-widest bg-[var(--color-stagetime-blue)]/10 px-3 py-1.5 rounded border border-[var(--color-stagetime-blue)]/20">
+                        {item.plannedDurationMinutes} minutes
+                      </div>
+                    </div>
                   </div>
                 </div>
               ))}
             </div>
 
-            <div className="mt-8 flex justify-end gap-4 pt-6 border-t border-white/10">
+            {error && (
+              <div className="mb-8 rounded-xl border border-[var(--color-stagetime-red)]/20 bg-[var(--color-stagetime-red)]/10 p-5 text-sm font-medium text-[var(--color-stagetime-red)] flex items-center gap-3">
+                <span className="h-2 w-2 rounded-full bg-[var(--color-stagetime-red)]" /> {error}
+              </div>
+            )}
+
+            <div className="mt-10 flex justify-end gap-5 pt-8 border-t border-[var(--color-stagetime-border)]">
               <Link href={`/events/${event.id}`}>
-                <Button variant="ghost">Cancel</Button>
+                <StageTimeButton variant="ghost" size="lg">Cancel</StageTimeButton>
               </Link>
-              <Button
+              <StageTimeButton
                 variant="primary"
+                size="lg"
                 disabled={apply.isPending}
                 loading={apply.isPending}
                 onClick={() => {
@@ -148,12 +163,12 @@ export default function AgendaImport() {
                   );
                 }}
               >
-                <Check className="h-4 w-4 mr-1" /> Commit to Run of Show
-              </Button>
+                <Check className="h-5 w-5 mr-2" /> Commit to Run of Show
+              </StageTimeButton>
             </div>
-          </Card>
+          </StageTimeCard>
         )}
       </div>
-    </Shell>
+    </StageTimeLayout>
   );
 }

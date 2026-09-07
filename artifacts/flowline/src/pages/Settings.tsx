@@ -1,42 +1,47 @@
 import React from 'react';
-import { Shell } from '../components/layout';
-import { Card, Button, Input, Label } from '../components/ui';
+import { StageTimeLayout, StageTimeCard, StageTimeButton, StageTimeInput, StageTimeLabel } from '../components/stagetime';
 import { Link } from 'wouter';
 
 export default function Settings() {
   return (
-    <Shell>
-      <div className="max-w-4xl mx-auto fade-up">
-        <h1 className="text-3xl font-bold text-white mb-8">Workspace Settings</h1>
+    <StageTimeLayout>
+      <div className="max-w-5xl mx-auto fade-up h-full flex flex-col">
+        <div className="mb-10">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--color-stagetime-blue)]/10 border border-[var(--color-stagetime-blue)]/20 text-[var(--color-stagetime-cyan)] text-[10px] font-bold uppercase tracking-[0.2em] mb-4">
+            Configuration
+          </div>
+          <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-white display-font mb-4">Workspace Settings</h1>
+          <p className="text-[var(--color-stagetime-text-dim)] text-lg">Manage your team profile and default preferences.</p>
+        </div>
 
         <div className="space-y-8">
-          <Card className="p-8">
-            <h2 className="text-xl font-bold text-white mb-6 border-b border-white/10 pb-4">Team Profile</h2>
-            <div className="space-y-6 max-w-xl">
+          <StageTimeCard className="p-8 md:p-10">
+            <h2 className="text-2xl font-bold text-white mb-8 border-b border-[var(--color-stagetime-border)] pb-6 display-font">Team Profile</h2>
+            <div className="space-y-8 max-w-xl">
               <div>
-                <Label>Workspace Name</Label>
-                <Input defaultValue="Production Crew" />
+                <StageTimeLabel>Workspace Name</StageTimeLabel>
+                <StageTimeInput defaultValue="Production Crew" />
               </div>
               <div>
-                <Label>Default Timezone</Label>
-                <Input defaultValue="America/Los_Angeles" disabled />
+                <StageTimeLabel>Default Timezone</StageTimeLabel>
+                <StageTimeInput defaultValue="America/Los_Angeles" disabled />
               </div>
-              <Button variant="primary">Save Changes</Button>
+              <StageTimeButton variant="primary" size="lg">Save Changes</StageTimeButton>
             </div>
-          </Card>
+          </StageTimeCard>
 
-          <Card className="p-8">
-            <h2 className="text-xl font-bold text-white mb-6 border-b border-white/10 pb-4">Billing & Plan</h2>
-            <div className="bg-cyan-500/10 border border-cyan-500/20 rounded-xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <StageTimeCard className="p-8 md:p-10">
+            <h2 className="text-2xl font-bold text-white mb-8 border-b border-[var(--color-stagetime-border)] pb-6 display-font">Billing & Plan</h2>
+            <div className="bg-[var(--color-stagetime-blue)]/5 border border-[var(--color-stagetime-blue)]/20 rounded-2xl p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 shadow-[0_0_20px_rgba(77,163,255,0.05)]">
               <div>
-                <div className="text-cyan-400 font-bold mb-1">Workspace billing</div>
-                <div className="text-sm text-slate-400">View the persisted plan and current entitlements.</div>
+                <div className="text-[var(--color-stagetime-cyan)] font-bold text-lg display-font mb-2">Workspace billing</div>
+                <div className="text-sm text-[var(--color-stagetime-text-dim)]">View the persisted plan and current entitlements.</div>
               </div>
-              <Link href="/billing"><Button variant="outline">View billing</Button></Link>
+              <Link href="/billing"><StageTimeButton variant="outline" size="lg">View Billing Dashboard</StageTimeButton></Link>
             </div>
-          </Card>
+          </StageTimeCard>
         </div>
       </div>
-    </Shell>
+    </StageTimeLayout>
   );
 }

@@ -1,17 +1,16 @@
 import React from 'react';
 import { Link } from 'wouter';
-import { PublicLayout } from '../components/layout';
-import { Button } from '../components/ui';
+import { PublicLayout, StageTimeButton } from '../components/stagetime';
 
 export default function NotFound() {
   return (
     <PublicLayout>
-      <div className="flex-1 flex flex-col items-center justify-center text-center px-4 fade-up">
-        <div className="mono text-8xl font-bold text-cyan-500/20 mb-4 tracking-tighter">404</div>
-        <h1 className="text-3xl font-bold text-white mb-4">Signal Lost</h1>
-        <p className="text-slate-400 max-w-md mb-8">The coordinate you requested does not exist or has been archived.</p>
+      <div className="flex-1 flex flex-col items-center justify-center text-center px-4 fade-up relative z-10 w-full">
+        <div className="text-[12rem] font-bold text-[var(--color-stagetime-blue)]/10 mb-4 tracking-tighter leading-none display-font">404</div>
+        <h1 className="text-4xl font-bold text-white mb-4 display-font">Signal Lost</h1>
+        <p className="text-[var(--color-stagetime-text-dim)] text-lg max-w-md mb-10">The coordinate you requested does not exist or has been archived.</p>
         <Link href="/">
-          <Button variant="primary">Return to Base</Button>
+          <StageTimeButton variant="primary" size="lg">Return to Command Center</StageTimeButton>
         </Link>
       </div>
     </PublicLayout>
