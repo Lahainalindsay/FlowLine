@@ -43,20 +43,27 @@ export default function Landing() {
           </div>
 
           <div className="fade-up-2 lg:block relative">
-            {/* Mockup visual */}
-            <div className="relative mx-auto w-full max-w-[600px] aspect-[4/3] glass-panel rounded-2xl p-2 shadow-2xl border-white/10 bg-[#0c121e]/80">
-              <div className="absolute top-4 left-4 text-xs text-slate-500 font-medium flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-red-500"></span>
-                <span className="h-2 w-2 rounded-full bg-amber-500"></span>
-                <span className="h-2 w-2 rounded-full bg-emerald-500"></span>
-              </div>
-              <div className="w-full h-full rounded-xl bg-[#06090e] border border-white/5 flex flex-col justify-center items-center relative overflow-hidden">
-                <div className="absolute top-8 mono text-xs tracking-widest text-slate-500">MAIN STAGE • KEYNOTE</div>
-                <div className="timer-text text-[clamp(4rem,8vw,7rem)] text-[#00FF9D] drop-shadow-[0_0_30px_rgba(0,255,157,0.3)]">
-                  00:12:34
-                </div>
-                <div className="absolute bottom-12 w-3/4 max-w-md h-2 bg-white/10 rounded-full overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-cyan-400 to-indigo-500 w-[65%] rounded-full shadow-[0_0_10px_rgba(0,229,255,0.5)]"></div>
+            <div className="relative mx-auto w-full max-w-[680px] overflow-hidden rounded-[28px] border border-cyan-200/15 bg-[#0c121e]/80 p-2 shadow-[0_30px_100px_rgba(0,100,255,0.24)]">
+              <div className="relative aspect-[3/2] overflow-hidden rounded-[22px] bg-[#06090e]">
+                <img
+                  src="/images/stagetime-hero.webp"
+                  alt="StageTime controlling a live event timer from the main stage"
+                  className="h-full w-full object-cover object-center"
+                  width="1536"
+                  height="1024"
+                  fetchPriority="high"
+                />
+                <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#050b14]/75 via-transparent to-transparent" />
+                <div className="absolute inset-x-5 bottom-5 rounded-2xl border border-white/15 bg-[#07111f]/75 px-5 py-4 shadow-2xl backdrop-blur-xl sm:inset-x-auto sm:left-6 sm:min-w-72">
+                  <div className="mb-1 text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-200">
+                    Main Stage • Keynote
+                  </div>
+                  <div className="timer-text text-4xl text-[#6BEA9C] drop-shadow-[0_0_22px_rgba(107,234,156,0.35)] sm:text-5xl">
+                    00:12:34
+                  </div>
+                  <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+                    <div className="h-full w-[65%] rounded-full bg-gradient-to-r from-cyan-300 to-blue-500 shadow-[0_0_12px_rgba(104,225,255,0.6)]" />
+                  </div>
                 </div>
               </div>
             </div>
