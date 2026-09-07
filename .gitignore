@@ -2,6 +2,7 @@
 
 # compiled output
 dist
+.test-dist
 tmp
 out-tsc
 *.tsbuildinfo
@@ -47,3 +48,8 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+
+# Local environment files (the committed .env.example is safe to share)
+.env
+.env.*
+!.env.example

@@ -35,6 +35,24 @@ import {
   UpdateAgendaItemBody,
   UpdateAgendaItemParams,
   UpdateEventBody,
+  CreateInvitationBody,
+  CreateInvitationResponse,
+  CreateTemplateBody,
+  CreateTemplateResponse,
+  DeleteTemplateParams,
+  GetBillingEntitlementResponse,
+  GetWorkspaceSummaryResponse,
+  ListAuditLogsResponse,
+  ListInvitationsResponse,
+  ListTeamMembersResponse,
+  ListTemplatesResponse,
+  RevokeInvitationParams,
+  UpdateTeamMemberRoleBody,
+  UpdateTeamMemberRoleParams,
+  UpdateTeamMemberRoleResponse,
+  UpdateTemplateBody,
+  UpdateTemplateParams,
+  UpdateTemplateResponse,
 } from "@workspace/api-zod";
 import { db } from "@workspace/db";
 import {
@@ -42,9 +60,20 @@ import {
   displayAccessTable,
   displaysTable,
   eventsTable,
+  liveSessionCommandsTable,
   liveSessionsTable,
+  workspaceMembersTable,
+  appUsersTable,
+  auditLogsTable,
+  subscriptionsTable,
+  timerTemplatesTable,
+  workspaceInvitationsTable,
+  workspacesTable,
 } from "@workspace/db";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { ensurePersonalWorkspace, getWorkspaceMembership, getWorkspacePlan, mayCreate, PLAN_ENTITLEMENTS, roleCan, type Permission } from "../lib/workspace";
+import { beginSse, publishSnapshots, sendSnapshot, subscribeOperator, subscribePublic } from "../lib/realtime";
+import { createSessionTransition, projectSession } from "../lib/timer";
 
 const router: IRouter = Router();
 
@@ -63,7 +92,7 @@ function createAccessToken(accessId: string, expiresAt: Date) {
   return `${payload}.${signature}`;
 }
 
-function parseAccessToken(token: string) {
+export function parseAccessToken(token: string) {
   const [accessId, expiresRaw, signature] = token.split(".");
   if (!accessId || !expiresRaw || !signature) return null;
   const expiresAt = Number(expiresRaw);
@@ -115,58 +144,34 @@ async function ensureSession(eventId: string, firstItemId?: string) {
       elapsedSeconds: 0,
       lastCommandAt: new Date(),
     })
+    .onConflictDoNothing()
     .returning();
-  return created;
+  if (created) return created;
+  const [concurrent] = await db.select().from(liveSessionsTable)
+    .where(eq(liveSessionsTable.eventId, eventId)).limit(1);
+  if (!concurrent) throw new Error("Unable to initialize live session");
+  return concurrent;
 }
 
-function sessionPayload(session: typeof liveSessionsTable.$inferSelect) {
-  let remainingSeconds = session.remainingSeconds;
-  let elapsedSeconds = session.elapsedSeconds;
-  let state = session.state;
-
-  if ((session.state === "running" || session.state === "overtime") && session.lastCommandAt) {
-    const tick = Math.max(
-      0,
-      Math.floor((Date.now() - session.lastCommandAt.getTime()) / 1000),
-    );
-    remainingSeconds -= tick;
-    elapsedSeconds += tick;
-    state = remainingSeconds <= 0 ? "overtime" : "running";
-  }
-
+function sessionPayload(session: typeof liveSessionsTable.$inferSelect, at = new Date()) {
+  const projection = projectSession(session, at);
   return {
     eventId: session.eventId,
-    state,
+    state: projection.state,
     activeItemId: session.activeItemId,
-    remainingSeconds,
-    elapsedSeconds,
-    serverTime: nowIso(),
+    // Counters intentionally remain at the persisted anchor. A reader must
+    // project from timerAnchorAt rather than treating a polling response as a
+    // new mutable timer value.
+    remainingSeconds: session.remainingSeconds,
+    elapsedSeconds: session.elapsedSeconds,
+    timerAnchorAt: (session.timerAnchorAt ?? session.lastCommandAt).toISOString(),
+    serverTime: at.toISOString(),
+    revision: session.revision,
     startedAt: iso(session.startedAt),
     pausedAt: iso(session.pausedAt),
     operatorMessage: session.operatorMessage,
     activeCue: session.activeCue,
   };
-}
-
-async function persistTick(session: typeof liveSessionsTable.$inferSelect) {
-  if ((session.state !== "running" && session.state !== "overtime") || !session.lastCommandAt) return session;
-  const tick = Math.max(
-    0,
-    Math.floor((Date.now() - session.lastCommandAt.getTime()) / 1000),
-  );
-  if (tick === 0) return session;
-  const next = {
-    remainingSeconds: session.remainingSeconds - tick,
-    elapsedSeconds: session.elapsedSeconds + tick,
-    state: session.remainingSeconds - tick <= 0 ? "overtime" : "running",
-    lastCommandAt: new Date(),
-  };
-  const [updated] = await db
-    .update(liveSessionsTable)
-    .set(next)
-    .where(eq(liveSessionsTable.eventId, session.eventId))
-    .returning();
-  return updated;
 }
 
 async function eventPayload(event: typeof eventsTable.$inferSelect) {
@@ -223,6 +228,63 @@ function displayPayload(display: typeof displaysTable.$inferSelect) {
   };
 }
 
+async function publicDisplaySnapshot(accessId: string, eventType: string) {
+  const [access] = await db.select().from(displayAccessTable)
+    .where(eq(displayAccessTable.id, accessId)).limit(1);
+  if (!access || access.revokedAt || access.expiresAt <= new Date()) return null;
+  const [[event], [display], agenda, session] = await Promise.all([
+    db.select().from(eventsTable).where(eq(eventsTable.id, access.eventId)).limit(1),
+    db.select().from(displaysTable).where(and(eq(displaysTable.id, access.displayId), eq(displaysTable.eventId, access.eventId))).limit(1),
+    getAgenda(access.eventId),
+    ensureSession(access.eventId),
+  ]);
+  if (!event || !display) return null;
+  const rawSession = sessionPayload(session);
+  // Do not expose internal cue state or agenda notes to an untrusted surface.
+  const { activeCue: _activeCue, ...sessionPayloadPublic } = rawSession;
+  return {
+    eventType,
+    revision: session.revision,
+    serverTime: new Date().toISOString(),
+    state: {
+      event: { name: event.name, timezone: event.timezone },
+      display: displayPayload(display),
+      agenda: agenda.map(({ notes: _notes, ...item }) => agendaPayload({ ...item, notes: null })).map(({ notes: _notes, ...item }) => item),
+      session: sessionPayloadPublic,
+    },
+  };
+}
+
+async function operatorSnapshot(eventId: string, eventType: string) {
+  const [event] = await db.select().from(eventsTable).where(eq(eventsTable.id, eventId)).limit(1);
+  if (!event) return null;
+  const detail = await eventPayload(event);
+  const [agenda, displays] = await Promise.all([
+    getAgenda(eventId),
+    db.select().from(displaysTable).where(eq(displaysTable.eventId, eventId)),
+  ]);
+  return {
+    eventType,
+    revision: detail.session.revision,
+    serverTime: new Date().toISOString(),
+    state: { ...detail, agenda: agenda.map(agendaPayload), displays: displays.map(displayPayload) },
+  };
+}
+
+async function publishRealtime(eventId: string, eventType: string, bumpRevision = true) {
+  if (bumpRevision) {
+    await db.update(liveSessionsTable)
+      .set({ revision: sql`${liveSessionsTable.revision} + 1`, lastCommandAt: new Date() })
+      .where(eq(liveSessionsTable.eventId, eventId));
+  }
+  await publishSnapshots(
+    eventId,
+    eventType,
+    () => operatorSnapshot(eventId, eventType),
+    (accessId) => publicDisplaySnapshot(accessId, eventType),
+  );
+}
+
 router.post("/display-access/resolve", async (req, res) => {
   const body = ResolveDisplayCodeBody.parse(req.body);
   const [access] = await db
@@ -272,20 +334,60 @@ router.get("/display-access/:token", async (req, res) => {
     event: { name: event.name, timezone: event.timezone },
     display: displayPayload({ ...display, lastSeenAt: new Date(), connectionStatus: "online" }),
     agenda: agenda.map(agendaPayload),
-    session: sessionPayload(await persistTick(session)),
+    session: sessionPayload(session),
   });
+});
+
+router.get("/display-access/:token/stream", async (req, res): Promise<void> => {
+  const token = Array.isArray(req.params.token) ? req.params.token[0] : req.params.token;
+  const parsed = parseAccessToken(token);
+  if (!parsed) { res.status(401).json({ error: "Display access expired" }); return; }
+  const snapshot = await publicDisplaySnapshot(parsed.accessId, "snapshot");
+  if (!snapshot) { res.status(401).json({ error: "Display access expired" }); return; }
+  beginSse(res);
+  sendSnapshot(res, "snapshot", snapshot);
+  const [access] = await db.select({ eventId: displayAccessTable.eventId }).from(displayAccessTable)
+    .where(eq(displayAccessTable.id, parsed.accessId)).limit(1);
+  if (!access) { res.end(); return; }
+  subscribePublic(access.eventId, parsed.accessId, res);
+  // A token may be revoked after connecting. Periodic validation closes it
+  // rather than relying on the next application update.
+  const validator = setInterval(async () => {
+    const valid = await publicDisplaySnapshot(parsed.accessId, "heartbeat");
+    if (!valid) { clearInterval(validator); res.end(); }
+  }, 30_000);
+  res.on("close", () => clearInterval(validator));
 });
 
 router.use(requireAuth);
 
+router.use(async (req, res, next) => {
+  try {
+    res.locals.personalWorkspaceId = await ensurePersonalWorkspace(res.locals.userId);
+    next();
+  } catch (error) {
+    req.log.error({ error, userId: res.locals.userId }, "Failed to provision personal workspace");
+    res.status(500).json({ error: "Unable to initialize workspace" });
+  }
+});
+
+function requiredEventPermission(req: { method: string; path: string }): Permission {
+  if (req.method === "GET") return "event:read";
+  if (req.path.includes("/session") || req.path.includes("/messages") || req.path.includes("/cues")) return "live:control";
+  if (req.path.includes("/displays") || req.path.includes("/display-access")) return "display:manage";
+  return "event:write";
+}
+
 router.use("/events/:eventId", async (req, res, next) => {
   const eventId = Array.isArray(req.params.eventId) ? req.params.eventId[0] : req.params.eventId;
   const [event] = await db
-    .select({ id: eventsTable.id })
+    .select({ id: eventsTable.id, role: workspaceMembersTable.role })
     .from(eventsTable)
-    .where(and(eq(eventsTable.id, eventId), eq(eventsTable.ownerUserId, res.locals.userId)))
+    .innerJoin(workspaceMembersTable, eq(workspaceMembersTable.workspaceId, eventsTable.workspaceId))
+    .where(and(eq(eventsTable.id, eventId), eq(workspaceMembersTable.userId, res.locals.userId)))
     .limit(1);
-  if (!event) {
+  const permission = requiredEventPermission(req);
+  if (!event || !roleCan(event.role, permission)) {
     res.status(404).json({ error: "Event not found" });
     return;
   }
@@ -295,12 +397,13 @@ router.use("/events/:eventId", async (req, res, next) => {
 router.use("/agenda/:itemId", async (req, res, next) => {
   const itemId = Array.isArray(req.params.itemId) ? req.params.itemId[0] : req.params.itemId;
   const [owned] = await db
-    .select({ id: agendaItemsTable.id })
+    .select({ id: agendaItemsTable.id, role: workspaceMembersTable.role })
     .from(agendaItemsTable)
     .innerJoin(eventsTable, eq(eventsTable.id, agendaItemsTable.eventId))
-    .where(and(eq(agendaItemsTable.id, itemId), eq(eventsTable.ownerUserId, res.locals.userId)))
+    .innerJoin(workspaceMembersTable, eq(workspaceMembersTable.workspaceId, eventsTable.workspaceId))
+    .where(and(eq(agendaItemsTable.id, itemId), eq(workspaceMembersTable.userId, res.locals.userId)))
     .limit(1);
-  if (!owned) {
+  if (!owned || !roleCan(owned.role, req.method === "GET" ? "event:read" : "event:write")) {
     res.status(404).json({ error: "Agenda item not found" });
     return;
   }
@@ -310,12 +413,13 @@ router.use("/agenda/:itemId", async (req, res, next) => {
 router.use("/displays/:displayId", async (req, res, next) => {
   const displayId = Array.isArray(req.params.displayId) ? req.params.displayId[0] : req.params.displayId;
   const [owned] = await db
-    .select({ id: displaysTable.id })
+    .select({ id: displaysTable.id, role: workspaceMembersTable.role })
     .from(displaysTable)
     .innerJoin(eventsTable, eq(eventsTable.id, displaysTable.eventId))
-    .where(and(eq(displaysTable.id, displayId), eq(eventsTable.ownerUserId, res.locals.userId)))
+    .innerJoin(workspaceMembersTable, eq(workspaceMembersTable.workspaceId, eventsTable.workspaceId))
+    .where(and(eq(displaysTable.id, displayId), eq(workspaceMembersTable.userId, res.locals.userId)))
     .limit(1);
-  if (!owned) {
+  if (!owned || !roleCan(owned.role, "display:manage")) {
     res.status(404).json({ error: "Display not found" });
     return;
   }
@@ -327,9 +431,10 @@ router.get("/dashboard/summary", async (req, res) => {
     const events = await db
       .select()
       .from(eventsTable)
-      .where(eq(eventsTable.ownerUserId, res.locals.userId))
+      .innerJoin(workspaceMembersTable, eq(workspaceMembersTable.workspaceId, eventsTable.workspaceId))
+      .where(eq(workspaceMembersTable.userId, res.locals.userId))
       .orderBy(asc(eventsTable.date), desc(eventsTable.updatedAt));
-    const summaries = await Promise.all(events.map(eventPayload));
+    const summaries = await Promise.all(events.map((row) => eventPayload(row.flowline_events)));
     const activeEvent =
       summaries.find((event) => event.status === "live") ?? null;
     res.json({
@@ -358,9 +463,10 @@ router.get("/events", async (req, res) => {
     const events = await db
       .select()
       .from(eventsTable)
-      .where(eq(eventsTable.ownerUserId, res.locals.userId))
+      .innerJoin(workspaceMembersTable, eq(workspaceMembersTable.workspaceId, eventsTable.workspaceId))
+      .where(eq(workspaceMembersTable.userId, res.locals.userId))
       .orderBy(asc(eventsTable.date), desc(eventsTable.updatedAt));
-    res.json(await Promise.all(events.map(eventPayload)));
+    res.json(await Promise.all(events.map((row) => eventPayload(row.flowline_events))));
   } catch (error) {
     req.log.error({ error }, "Failed to list events");
     res.status(500).json({ error: "Unable to list events" });
@@ -371,11 +477,20 @@ router.post("/events", async (req, res) => {
   const body = CreateEventBody.parse(req.body);
   const eventId = id();
   try {
+    const workspaceId = res.locals.personalWorkspaceId as string;
+    const existing = await db.select({ id: eventsTable.id }).from(eventsTable)
+      .where(and(eq(eventsTable.workspaceId, workspaceId), sql`${eventsTable.status} <> 'completed'`));
+    const entitlement = await mayCreate(workspaceId, "activeEvents", existing.length);
+    if (!entitlement.allowed) {
+      res.status(403).json({ error: `${entitlement.plan} allows up to ${entitlement.limit} active events. Complete or delete an event to create another.` });
+      return;
+    }
     const [event] = await db
       .insert(eventsTable)
       .values({
         id: eventId,
         ownerUserId: res.locals.userId,
+        workspaceId,
         name: body.name,
         date: body.date,
         venue: body.venue ?? null,
@@ -427,6 +542,7 @@ router.patch("/events/:eventId", async (req, res) => {
     .where(eq(eventsTable.id, params.eventId))
     .returning();
   if (!event) return res.status(404).json({ error: "Event not found" });
+  void publishRealtime(params.eventId, "event");
   return res.json(await eventPayload(event));
 });
 
@@ -436,6 +552,7 @@ router.delete("/events/:eventId", async (req, res) => {
   if (!event) return res.status(404).json({ error: "Event not found" });
   await db.delete(agendaItemsTable).where(eq(agendaItemsTable.eventId, params.eventId));
   await db.delete(displaysTable).where(eq(displaysTable.eventId, params.eventId));
+  await db.delete(liveSessionCommandsTable).where(eq(liveSessionCommandsTable.eventId, params.eventId));
   await db.delete(liveSessionsTable).where(eq(liveSessionsTable.eventId, params.eventId));
   await db.delete(eventsTable).where(eq(eventsTable.id, params.eventId));
   return res.status(204).send();
@@ -471,6 +588,7 @@ router.post("/events/:eventId/agenda", async (req, res) => {
       notes: body.notes ?? null,
     })
     .returning();
+  void publishRealtime(params.eventId, "agenda");
   res.status(201).json(agendaPayload(item));
 });
 
@@ -486,6 +604,7 @@ router.post("/events/:eventId/agenda/reorder", async (req, res) => {
         .returning(),
     ),
   );
+  void publishRealtime(params.eventId, "agenda");
   res.json(updates.flat().map(agendaPayload));
 });
 
@@ -557,6 +676,7 @@ router.post("/events/:eventId/agenda/import", async (req, res) => {
     }));
     return tx.insert(agendaItemsTable).values(values).returning();
   });
+  void publishRealtime(params.eventId, "agenda");
   return res.status(201).json(imported.map(agendaPayload));
 });
 
@@ -572,6 +692,7 @@ router.patch("/agenda/:itemId", async (req, res) => {
     .where(eq(agendaItemsTable.id, params.itemId))
     .returning();
   if (!item) return res.status(404).json({ error: "Agenda item not found" });
+  void publishRealtime(item.eventId, "agenda");
   return res.json(agendaPayload(item));
 });
 
@@ -580,6 +701,7 @@ router.delete("/agenda/:itemId", async (req, res) => {
   const [item] = await db.select().from(agendaItemsTable).where(eq(agendaItemsTable.id, params.itemId)).limit(1);
   if (!item) return res.status(404).json({ error: "Agenda item not found" });
   await db.delete(agendaItemsTable).where(eq(agendaItemsTable.id, params.itemId));
+  void publishRealtime(item.eventId, "agenda");
   return res.status(204).send();
 });
 
@@ -605,125 +727,87 @@ router.post("/events/:eventId/displays", async (req, res) => {
       currentContent: "Ready to receive live timing",
     })
     .returning();
+  void publishRealtime(params.eventId, "display");
   res.status(201).json(displayPayload(display));
 });
 
 router.delete("/displays/:displayId", async (req, res) => {
   const params = DeleteDisplayParams.parse(req.params);
+  const [display] = await db.select({ eventId: displaysTable.eventId }).from(displaysTable).where(eq(displaysTable.id, params.displayId)).limit(1);
   await db.delete(displaysTable).where(eq(displaysTable.id, params.displayId));
+  if (display) void publishRealtime(display.eventId, "display");
   res.status(204).send();
 });
 
 router.get("/events/:eventId/session", async (req, res) => {
   const params = GetLiveSessionParams.parse(req.params);
   const session = await ensureSession(params.eventId, (await getAgenda(params.eventId))[0]?.id);
-  const current = await persistTick(session);
-  res.json(sessionPayload(current));
+  res.json(sessionPayload(session));
+});
+
+router.get("/events/:eventId/stream", async (req, res): Promise<void> => {
+  const eventId = Array.isArray(req.params.eventId) ? req.params.eventId[0] : req.params.eventId;
+  const snapshot = await operatorSnapshot(eventId, "snapshot");
+  if (!snapshot) { res.status(404).json({ error: "Event not found" }); return; }
+  beginSse(res);
+  sendSnapshot(res, "snapshot", snapshot);
+  subscribeOperator(eventId, res);
 });
 
 router.post("/events/:eventId/session", async (req, res) => {
   const params = ControlLiveSessionParams.parse(req.params);
   const body = ControlLiveSessionBody.parse(req.body);
-  let session = await ensureSession(params.eventId, (await getAgenda(params.eventId))[0]?.id);
-  session = await persistTick(session);
-  const agenda = await getAgenda(params.eventId);
-  const activeIndex = agenda.findIndex((item) => item.id === session.activeItemId);
-  let nextValues: Partial<typeof liveSessionsTable.$inferInsert> = {
-    lastCommandAt: new Date(),
-  };
+  await ensureSession(params.eventId, (await getAgenda(params.eventId))[0]?.id);
+  const result = await db.transaction(async (tx) => {
+    // Lock the single event session so a command is projected and sequenced
+    // against one authoritative state, not against a stale polling read.
+    const [session] = await tx.select().from(liveSessionsTable)
+      .where(eq(liveSessionsTable.eventId, params.eventId)).for("update").limit(1);
+    if (!session) throw new Error("Live session was not created");
 
-  switch (body.action) {
-    case "start":
-    case "resume":
-      nextValues.state = "running";
-      nextValues.startedAt = session.startedAt ?? new Date();
-      nextValues.pausedAt = null;
-      if (!session.activeItemId && agenda[0]) {
-        nextValues.activeItemId = agenda[0].id;
-        nextValues.remainingSeconds = agenda[0].plannedDurationMinutes * 60;
-      }
-      break;
-    case "pause":
-      nextValues.state = "paused";
-      nextValues.pausedAt = new Date();
-      break;
-    case "reset": {
-      const item = agenda[activeIndex >= 0 ? activeIndex : 0];
-      nextValues.state = "idle";
-      nextValues.elapsedSeconds = 0;
-      nextValues.activeItemId = item?.id ?? null;
-      nextValues.remainingSeconds = item ? item.plannedDurationMinutes * 60 : 0;
-      nextValues.startedAt = null;
-      nextValues.pausedAt = null;
-      break;
-    }
-    case "restart": {
-      const item = agenda[activeIndex >= 0 ? activeIndex : 0];
-      nextValues.state = "running";
-      nextValues.elapsedSeconds = 0;
-      nextValues.remainingSeconds = item ? item.plannedDurationMinutes * 60 : 0;
-      nextValues.startedAt = new Date();
-      nextValues.pausedAt = null;
-      break;
-    }
-    case "add_time":
-      nextValues.remainingSeconds = session.remainingSeconds + (body.amountSeconds ?? 60);
-      break;
-    case "subtract_time":
-      nextValues.remainingSeconds = session.remainingSeconds - (body.amountSeconds ?? 60);
-      break;
-    case "next":
-    case "previous":
-    case "jump": {
-      const targetIndex =
-        body.action === "jump" && body.itemId
-          ? agenda.findIndex((item) => item.id === body.itemId)
-          : activeIndex + (body.action === "next" ? 1 : -1);
-      const item = agenda[Math.min(Math.max(targetIndex, 0), Math.max(agenda.length - 1, 0))];
-      nextValues.activeItemId = item?.id ?? null;
-      nextValues.remainingSeconds = item ? item.plannedDurationMinutes * 60 : 0;
-      nextValues.elapsedSeconds = 0;
-      nextValues.state = "paused";
-      break;
-    }
-  }
+    const [duplicate] = await tx.select().from(liveSessionCommandsTable)
+      .where(and(eq(liveSessionCommandsTable.eventId, params.eventId), eq(liveSessionCommandsTable.commandId, body.commandId))).limit(1);
+    if (duplicate) return { kind: "success" as const, session, idempotent: true };
+    if (session.revision !== body.expectedRevision) return { kind: "conflict" as const, session };
 
-  const updated = await db.transaction(async (tx) => {
-    const [nextSession] = await tx
-      .update(liveSessionsTable)
-      .set(nextValues)
-      .where(eq(liveSessionsTable.eventId, params.eventId))
-      .returning();
+    const now = new Date();
+    const agenda = await tx.select().from(agendaItemsTable)
+      .where(eq(agendaItemsTable.eventId, params.eventId)).orderBy(asc(agendaItemsTable.position));
+    const activeIndex = agenda.findIndex((item) => item.id === session.activeItemId);
+    const navigation = body.action === "next" || body.action === "next_session" || body.action === "previous" || body.action === "jump";
+    const starting = body.action === "start" || body.action === "resume" || body.action === "restart";
+    const nextValues = createSessionTransition(session, agenda, body, now);
 
-    const isNavigation = body.action === "next" || body.action === "previous" || body.action === "jump";
-    const isStarting = body.action === "start" || body.action === "resume" || body.action === "restart";
-    if (isNavigation || isStarting) {
-      await tx
-        .update(agendaItemsTable)
-        .set({ status: "queued" })
-        .where(and(eq(agendaItemsTable.eventId, params.eventId), eq(agendaItemsTable.status, "active")));
+    const [nextSession] = await tx.update(liveSessionsTable).set(nextValues)
+      .where(and(eq(liveSessionsTable.eventId, params.eventId), eq(liveSessionsTable.revision, body.expectedRevision))).returning();
+    if (!nextSession) return { kind: "conflict" as const, session: (await tx.select().from(liveSessionsTable).where(eq(liveSessionsTable.eventId, params.eventId)).limit(1))[0] };
+
+    if (navigation || starting || body.action === "complete") {
+      await tx.update(agendaItemsTable).set({ status: "queued" }).where(and(eq(agendaItemsTable.eventId, params.eventId), eq(agendaItemsTable.status, "active")));
     }
-    if (isNavigation && body.action === "next" && session.activeItemId && session.activeItemId !== nextSession.activeItemId) {
-      await tx
-        .update(agendaItemsTable)
-        .set({ status: "complete", actualEndedAt: new Date() })
-        .where(eq(agendaItemsTable.id, session.activeItemId));
+    if ((body.action === "next" || body.action === "next_session" || body.action === "complete") && session.activeItemId) {
+      await tx.update(agendaItemsTable).set({ status: "complete", actualEndedAt: now }).where(eq(agendaItemsTable.id, session.activeItemId));
     }
-    if (nextSession.activeItemId && (isNavigation || isStarting)) {
-      await tx
-        .update(agendaItemsTable)
-        .set({
-          status: "active",
-          ...(isStarting ? { actualStartedAt: new Date(), actualEndedAt: null } : {}),
-        })
-        .where(eq(agendaItemsTable.id, nextSession.activeItemId));
+    if (nextSession.activeItemId && (navigation || starting)) {
+      await tx.update(agendaItemsTable).set({ status: "active", ...(starting ? { actualStartedAt: now, actualEndedAt: null } : {}) }).where(eq(agendaItemsTable.id, nextSession.activeItemId));
     }
-    if (isStarting) {
-      await tx.update(eventsTable).set({ status: "live", updatedAt: new Date() }).where(eq(eventsTable.id, params.eventId));
-    }
-    return nextSession;
+    if (starting) await tx.update(eventsTable).set({ status: "live", updatedAt: now }).where(eq(eventsTable.id, params.eventId));
+    if (body.action === "complete") await tx.update(eventsTable).set({ status: "completed", updatedAt: now }).where(eq(eventsTable.id, params.eventId));
+    await tx.insert(liveSessionCommandsTable).values({
+      id: id(), eventId: params.eventId, commandId: body.commandId, expectedRevision: body.expectedRevision,
+      resultingRevision: nextSession.revision, action: body.action, actorUserId: res.locals.userId,
+      payload: { amountSeconds: body.amountSeconds ?? null, itemId: body.itemId ?? null },
+    });
+    return { kind: "success" as const, session: nextSession, idempotent: false };
   });
-  res.json(sessionPayload(updated));
+  if (result.kind === "conflict") {
+    req.log.warn({ eventId: params.eventId, expectedRevision: body.expectedRevision, actualRevision: result.session?.revision, commandId: body.commandId }, "Rejected stale live-session command");
+    res.status(409).json({ error: "Live session changed; reconcile and retry", session: sessionPayload(result.session) });
+    return;
+  }
+  req.log.info({ eventId: params.eventId, action: body.action, revision: result.session.revision, commandId: body.commandId, idempotent: result.idempotent }, "Applied live-session command");
+  if (!result.idempotent) void publishRealtime(params.eventId, "session", false);
+  res.json(sessionPayload(result.session));
 });
 
 router.post("/events/:eventId/messages", async (req, res) => {
@@ -731,7 +815,7 @@ router.post("/events/:eventId/messages", async (req, res) => {
   const body = SendOperatorMessageBody.parse(req.body);
   const [session] = await db
     .update(liveSessionsTable)
-    .set({ operatorMessage: body.message, lastCommandAt: new Date() })
+    .set({ operatorMessage: body.message, lastCommandAt: new Date(), revision: sql`${liveSessionsTable.revision} + 1` })
     .where(eq(liveSessionsTable.eventId, params.eventId))
     .returning();
   res.json({
@@ -743,7 +827,7 @@ router.post("/events/:eventId/messages", async (req, res) => {
     expiresAt: body.expiresInSeconds ? new Date(Date.now() + body.expiresInSeconds * 1000).toISOString() : null,
   });
   req.log.info({ eventId: params.eventId, target: body.target }, "Sent operator message");
-  void session;
+  if (session) void publishRealtime(params.eventId, "message", false);
 });
 
 router.post("/events/:eventId/cues", async (req, res) => {
@@ -751,7 +835,7 @@ router.post("/events/:eventId/cues", async (req, res) => {
   const body = TriggerCueBody.parse(req.body);
   await db
     .update(liveSessionsTable)
-    .set({ activeCue: body.label, lastCommandAt: new Date() })
+    .set({ activeCue: body.label, lastCommandAt: new Date(), revision: sql`${liveSessionsTable.revision} + 1` })
     .where(eq(liveSessionsTable.eventId, params.eventId));
   res.json({
     id: id(),
@@ -759,6 +843,7 @@ router.post("/events/:eventId/cues", async (req, res) => {
     label: body.label,
     triggeredAt: nowIso(),
   });
+  void publishRealtime(params.eventId, "cue", false);
 });
 
 router.post("/events/:eventId/display-access", async (req, res) => {
@@ -802,17 +887,132 @@ router.post("/events/:eventId/display-access", async (req, res) => {
 router.post("/display-access/:accessId/revoke", async (req, res) => {
   const params = RevokeDisplayAccessParams.parse(req.params);
   const [owned] = await db
-    .select({ id: displayAccessTable.id })
+    .select({ id: displayAccessTable.id, eventId: displayAccessTable.eventId, role: workspaceMembersTable.role })
     .from(displayAccessTable)
     .innerJoin(eventsTable, eq(eventsTable.id, displayAccessTable.eventId))
-    .where(and(eq(displayAccessTable.id, params.accessId), eq(eventsTable.ownerUserId, res.locals.userId)))
+    .innerJoin(workspaceMembersTable, eq(workspaceMembersTable.workspaceId, eventsTable.workspaceId))
+    .where(and(eq(displayAccessTable.id, params.accessId), eq(workspaceMembersTable.userId, res.locals.userId)))
     .limit(1);
-  if (!owned) {
+  if (!owned || !roleCan(owned.role, "display:manage")) {
     res.status(404).json({ error: "Display access not found" });
     return;
   }
   await db.update(displayAccessTable).set({ revokedAt: new Date() }).where(eq(displayAccessTable.id, params.accessId));
+  void publishRealtime(owned.eventId, "display");
   res.status(204).send();
+});
+
+async function personalMembership(userId: string, workspaceId: string, permission: Permission) {
+  const membership = await getWorkspaceMembership(workspaceId, userId);
+  return membership && roleCan(membership.role, permission) ? membership : null;
+}
+
+async function audit(workspaceId: string, actorUserId: string, action: string, entityType: string, entityId?: string) {
+  await db.insert(auditLogsTable).values({ id: id(), workspaceId, actorUserId, action, entityType, entityId: entityId ?? null, metadata: {} });
+}
+
+router.get("/workspace/summary", async (req, res) => {
+  const workspaceId = res.locals.personalWorkspaceId as string;
+  const [workspace] = await db.select().from(workspacesTable).where(eq(workspacesTable.id, workspaceId)).limit(1);
+  const membership = await personalMembership(res.locals.userId, workspaceId, "workspace:read");
+  if (!workspace || !membership) { res.status(403).json({ error: "Workspace access denied" }); return; }
+  const plan = await getWorkspacePlan(workspaceId);
+  res.json(GetWorkspaceSummaryResponse.parse({ id: workspace.id, name: workspace.name, role: membership.role, plan, entitlements: PLAN_ENTITLEMENTS[plan] }));
+});
+
+router.get("/templates", async (req, res) => {
+  const workspaceId = res.locals.personalWorkspaceId as string;
+  if (!await personalMembership(res.locals.userId, workspaceId, "template:read")) { res.status(403).json({ error: "Template access denied" }); return; }
+  const templates = await db.select().from(timerTemplatesTable).where(eq(timerTemplatesTable.workspaceId, workspaceId)).orderBy(desc(timerTemplatesTable.updatedAt));
+  res.json(ListTemplatesResponse.parse(templates.map((item) => ({ ...item, createdAt: item.createdAt.toISOString(), updatedAt: item.updatedAt.toISOString() }))));
+});
+
+router.post("/templates", async (req, res) => {
+  const body = CreateTemplateBody.parse(req.body); const workspaceId = res.locals.personalWorkspaceId as string;
+  if (!await personalMembership(res.locals.userId, workspaceId, "template:write")) { res.status(403).json({ error: "Template access denied" }); return; }
+  const templates = await db.select({ id: timerTemplatesTable.id }).from(timerTemplatesTable).where(eq(timerTemplatesTable.workspaceId, workspaceId));
+  const entitlement = await mayCreate(workspaceId, "templates", templates.length);
+  if (!entitlement.allowed) { res.status(403).json({ error: `${entitlement.plan} allows up to ${entitlement.limit} templates.` }); return; }
+  const [template] = await db.insert(timerTemplatesTable).values({ id: id(), workspaceId, name: body.name, description: body.description ?? null, definition: body.definition, createdByUserId: res.locals.userId }).returning();
+  await audit(workspaceId, res.locals.userId, "template.created", "template", template.id);
+  req.log.info({ workspaceId, templateId: template.id }, "Created timer template");
+  res.status(201).json(CreateTemplateResponse.parse({ ...template, createdAt: template.createdAt.toISOString(), updatedAt: template.updatedAt.toISOString() }));
+});
+
+router.patch("/templates/:templateId", async (req, res) => {
+  const params = UpdateTemplateParams.parse(req.params); const body = UpdateTemplateBody.parse(req.body); const workspaceId = res.locals.personalWorkspaceId as string;
+  if (!await personalMembership(res.locals.userId, workspaceId, "template:write")) { res.status(403).json({ error: "Template access denied" }); return; }
+  const [template] = await db.update(timerTemplatesTable).set(body).where(and(eq(timerTemplatesTable.id, params.templateId), eq(timerTemplatesTable.workspaceId, workspaceId))).returning();
+  if (!template) { res.status(404).json({ error: "Template not found" }); return; }
+  await audit(workspaceId, res.locals.userId, "template.updated", "template", template.id);
+  res.json(UpdateTemplateResponse.parse({ ...template, createdAt: template.createdAt.toISOString(), updatedAt: template.updatedAt.toISOString() }));
+});
+
+router.delete("/templates/:templateId", async (req, res) => {
+  const params = DeleteTemplateParams.parse(req.params); const workspaceId = res.locals.personalWorkspaceId as string;
+  if (!await personalMembership(res.locals.userId, workspaceId, "template:write")) { res.status(403).json({ error: "Template access denied" }); return; }
+  const [template] = await db.delete(timerTemplatesTable).where(and(eq(timerTemplatesTable.id, params.templateId), eq(timerTemplatesTable.workspaceId, workspaceId))).returning();
+  if (!template) { res.status(404).json({ error: "Template not found" }); return; }
+  await audit(workspaceId, res.locals.userId, "template.deleted", "template", template.id); res.status(204).send();
+});
+
+router.get("/team/members", async (req, res) => {
+  const workspaceId = res.locals.personalWorkspaceId as string;
+  if (!await personalMembership(res.locals.userId, workspaceId, "team:read")) { res.status(403).json({ error: "Team access denied" }); return; }
+  const rows = await db.select({ id: workspaceMembersTable.id, userId: workspaceMembersTable.userId, role: workspaceMembersTable.role, createdAt: workspaceMembersTable.createdAt, displayName: appUsersTable.displayName, email: appUsersTable.email }).from(workspaceMembersTable).innerJoin(appUsersTable, eq(appUsersTable.clerkUserId, workspaceMembersTable.userId)).where(eq(workspaceMembersTable.workspaceId, workspaceId));
+  res.json(ListTeamMembersResponse.parse(rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString() }))));
+});
+
+router.patch("/team/members/:memberId/role", async (req, res) => {
+  const params = UpdateTeamMemberRoleParams.parse(req.params); const body = UpdateTeamMemberRoleBody.parse(req.body); const workspaceId = res.locals.personalWorkspaceId as string;
+  if (!await personalMembership(res.locals.userId, workspaceId, "team:manage")) { res.status(403).json({ error: "Team access denied" }); return; }
+  const [member] = await db.update(workspaceMembersTable).set({ role: body.role }).where(and(eq(workspaceMembersTable.id, params.memberId), eq(workspaceMembersTable.workspaceId, workspaceId), sql`${workspaceMembersTable.role} <> 'OWNER'`)).returning();
+  if (!member) { res.status(404).json({ error: "Member not found or is workspace owner" }); return; }
+  await audit(workspaceId, res.locals.userId, "member.role_changed", "member", member.id);
+  res.json(UpdateTeamMemberRoleResponse.parse({ ...member, createdAt: member.createdAt.toISOString() }));
+});
+
+router.get("/team/invitations", async (req, res) => {
+  const workspaceId = res.locals.personalWorkspaceId as string;
+  if (!await personalMembership(res.locals.userId, workspaceId, "team:read")) { res.status(403).json({ error: "Team access denied" }); return; }
+  const rows = await db.select().from(workspaceInvitationsTable).where(eq(workspaceInvitationsTable.workspaceId, workspaceId)).orderBy(desc(workspaceInvitationsTable.createdAt));
+  res.json(ListInvitationsResponse.parse(rows.map((row) => ({ ...row, expiresAt: row.expiresAt.toISOString(), acceptedAt: iso(row.acceptedAt), revokedAt: iso(row.revokedAt), createdAt: row.createdAt.toISOString() }))));
+});
+
+router.post("/team/invitations", async (req, res) => {
+  const body = CreateInvitationBody.parse(req.body); const workspaceId = res.locals.personalWorkspaceId as string;
+  if (!await personalMembership(res.locals.userId, workspaceId, "team:manage")) { res.status(403).json({ error: "Team access denied" }); return; }
+  const members = await db.select({ id: workspaceMembersTable.id }).from(workspaceMembersTable).where(eq(workspaceMembersTable.workspaceId, workspaceId));
+  const entitlement = await mayCreate(workspaceId, "members", members.length);
+  if (!entitlement.allowed) { res.status(403).json({ error: `${entitlement.plan} allows up to ${entitlement.limit} members.` }); return; }
+  const expiresAt = new Date(Date.now() + (body.expiresInDays ?? 7) * 86_400_000);
+  const [invitation] = await db.insert(workspaceInvitationsTable).values({ id: id(), workspaceId, email: body.email.toLowerCase(), role: body.role, tokenHash: createHash("sha256").update(randomBytes(32)).digest("hex"), invitedByUserId: res.locals.userId, expiresAt }).returning();
+  await audit(workspaceId, res.locals.userId, "invitation.created", "invitation", invitation.id);
+  req.log.info({ workspaceId, invitationId: invitation.id }, "Created workspace invitation");
+  res.status(201).json(CreateInvitationResponse.parse({ ...invitation, expiresAt: invitation.expiresAt.toISOString(), acceptedAt: null, revokedAt: null, createdAt: invitation.createdAt.toISOString() }));
+});
+
+router.post("/team/invitations/:invitationId/revoke", async (req, res) => {
+  const params = RevokeInvitationParams.parse(req.params); const workspaceId = res.locals.personalWorkspaceId as string;
+  if (!await personalMembership(res.locals.userId, workspaceId, "team:manage")) { res.status(403).json({ error: "Team access denied" }); return; }
+  const [invitation] = await db.update(workspaceInvitationsTable).set({ revokedAt: new Date() }).where(and(eq(workspaceInvitationsTable.id, params.invitationId), eq(workspaceInvitationsTable.workspaceId, workspaceId))).returning();
+  if (!invitation) { res.status(404).json({ error: "Invitation not found" }); return; }
+  await audit(workspaceId, res.locals.userId, "invitation.revoked", "invitation", invitation.id); res.status(204).send();
+});
+
+router.get("/audit", async (req, res) => {
+  const workspaceId = res.locals.personalWorkspaceId as string;
+  if (!await personalMembership(res.locals.userId, workspaceId, "audit:read")) { res.status(403).json({ error: "Audit access denied" }); return; }
+  const rows = await db.select().from(auditLogsTable).where(eq(auditLogsTable.workspaceId, workspaceId)).orderBy(desc(auditLogsTable.createdAt)).limit(100);
+  res.json(ListAuditLogsResponse.parse(rows.map((row) => ({ ...row, createdAt: row.createdAt.toISOString() }))));
+});
+
+router.get("/billing", async (req, res) => {
+  const workspaceId = res.locals.personalWorkspaceId as string;
+  if (!await personalMembership(res.locals.userId, workspaceId, "billing:read")) { res.status(403).json({ error: "Billing access denied" }); return; }
+  const [subscription] = await db.select().from(subscriptionsTable).where(eq(subscriptionsTable.workspaceId, workspaceId)).limit(1);
+  const plan = subscription?.plan ?? "STARTER";
+  res.json(GetBillingEntitlementResponse.parse({ plan, status: subscription?.status ?? "active", entitlements: PLAN_ENTITLEMENTS[plan], upgradesAvailable: false }));
 });
 
 export default router;

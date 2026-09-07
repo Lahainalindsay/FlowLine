@@ -18,6 +18,8 @@ tags:
     description: Agenda segment management
   - name: live
     description: Live session control and displays
+  - name: workspace
+    description: Workspace, team, templates and entitlements
 paths:
   /healthz:
     get:
@@ -313,6 +315,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/LiveSession"
+        "409":
+          description: The supplied revision is stale; reconcile using the returned authoritative session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LiveSessionConflict"
   /events/{eventId}/messages:
     parameters:
       - $ref: "#/components/parameters/EventId"
@@ -421,6 +429,92 @@ paths:
       responses:
         "204":
           description: Revoked
+  /workspace/summary:
+    get:
+      operationId: getWorkspaceSummary
+      tags: [workspace]
+      summary: Get the authenticated personal workspace
+      responses:
+        "200": { description: Workspace summary, content: { application/json: { schema: { $ref: "#/components/schemas/WorkspaceSummary" } } } }
+  /templates:
+    get:
+      operationId: listTemplates
+      tags: [workspace]
+      summary: List workspace timer templates
+      responses:
+        "200": { description: Templates, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/TimerTemplate" } } } } }
+    post:
+      operationId: createTemplate
+      tags: [workspace]
+      summary: Create a timer template
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TimerTemplateInput" } } } }
+      responses:
+        "201": { description: Created template, content: { application/json: { schema: { $ref: "#/components/schemas/TimerTemplate" } } } }
+  /templates/{templateId}:
+    parameters: [ { $ref: "#/components/parameters/TemplateId" } ]
+    patch:
+      operationId: updateTemplate
+      tags: [workspace]
+      summary: Update a timer template
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TimerTemplateUpdate" } } } }
+      responses:
+        "200": { description: Updated template, content: { application/json: { schema: { $ref: "#/components/schemas/TimerTemplate" } } } }
+    delete:
+      operationId: deleteTemplate
+      tags: [workspace]
+      summary: Delete a timer template
+      responses: { "204": { description: Deleted } }
+  /team/members:
+    get:
+      operationId: listTeamMembers
+      tags: [workspace]
+      summary: List workspace members
+      responses:
+        "200": { description: Members, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/TeamMember" } } } } }
+  /team/members/{memberId}/role:
+    parameters: [ { $ref: "#/components/parameters/MemberId" } ]
+    patch:
+      operationId: updateTeamMemberRole
+      tags: [workspace]
+      summary: Change a member role
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/TeamMemberRoleUpdate" } } } }
+      responses:
+        "200": { description: Updated member, content: { application/json: { schema: { $ref: "#/components/schemas/TeamMember" } } } }
+  /team/invitations:
+    get:
+      operationId: listInvitations
+      tags: [workspace]
+      summary: List workspace invitations
+      responses:
+        "200": { description: Invitations, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/Invitation" } } } } }
+    post:
+      operationId: createInvitation
+      tags: [workspace]
+      summary: Create a workspace invitation
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/InvitationInput" } } } }
+      responses:
+        "201": { description: Created invitation, content: { application/json: { schema: { $ref: "#/components/schemas/Invitation" } } } }
+  /team/invitations/{invitationId}/revoke:
+    parameters: [ { $ref: "#/components/parameters/InvitationId" } ]
+    post:
+      operationId: revokeInvitation
+      tags: [workspace]
+      summary: Revoke a workspace invitation
+      responses: { "204": { description: Revoked } }
+  /audit:
+    get:
+      operationId: listAuditLogs
+      tags: [workspace]
+      summary: List workspace audit activity
+      responses:
+        "200": { description: Audit records, content: { application/json: { schema: { type: array, items: { $ref: "#/components/schemas/AuditLog" } } } } }
+  /billing:
+    get:
+      operationId: getBillingEntitlement
+      tags: [workspace]
+      summary: Get persisted billing state and entitlements
+      responses:
+        "200": { description: Billing state, content: { application/json: { schema: { $ref: "#/components/schemas/BillingEntitlement" } } } }
 components:
   parameters:
     EventId:
@@ -441,6 +535,21 @@ components:
       required: true
       schema:
         type: string
+    TemplateId:
+      name: templateId
+      in: path
+      required: true
+      schema: { type: string }
+    MemberId:
+      name: memberId
+      in: path
+      required: true
+      schema: { type: string }
+    InvitationId:
+      name: invitationId
+      in: path
+      required: true
+      schema: { type: string }
   responses:
     NotFound:
       description: Resource not found
@@ -647,25 +756,35 @@ components:
           $ref: "#/components/schemas/LiveSession"
     LiveSession:
       type: object
-      required: [eventId, state, activeItemId, remainingSeconds, elapsedSeconds, serverTime, operatorMessage, activeCue]
+      required: [eventId, state, activeItemId, remainingSeconds, elapsedSeconds, timerAnchorAt, serverTime, revision, operatorMessage, activeCue]
       properties:
         eventId: { type: string }
         state: { type: string, enum: [idle, running, paused, overtime, completed] }
         activeItemId: { type: ["string", "null"] }
         remainingSeconds: { type: integer }
         elapsedSeconds: { type: integer }
+        timerAnchorAt: { type: string, description: Server timestamp at which remainingSeconds and elapsedSeconds were captured }
         serverTime: { type: string }
+        revision: { type: integer, minimum: 0 }
         startedAt: { type: ["string", "null"] }
         pausedAt: { type: ["string", "null"] }
         operatorMessage: { type: ["string", "null"] }
         activeCue: { type: ["string", "null"] }
     SessionControl:
       type: object
-      required: [action]
+      required: [action, expectedRevision, commandId]
       properties:
-        action: { type: string, enum: [start, pause, resume, reset, add_time, subtract_time, next, previous, restart, jump] }
+        action: { type: string, enum: [start, pause, resume, reset, complete, add_time, subtract_time, next, next_session, previous, restart, jump] }
+        expectedRevision: { type: integer, minimum: 0 }
+        commandId: { type: string, minLength: 1, maxLength: 128, description: Client-generated idempotency key scoped to this event }
         amountSeconds: { type: integer, minimum: 1 }
         itemId: { type: ["string", "null"] }
+    LiveSessionConflict:
+      type: object
+      required: [error, session]
+      properties:
+        error: { type: string }
+        session: { $ref: "#/components/schemas/LiveSession" }
     OperatorMessage:
       type: object
       required: [id, eventId, message, priority, target, expiresAt]
@@ -722,4 +841,97 @@ components:
         label: { type: string }
         timestamp: { type: string }
         tone: { type: string, enum: [neutral, positive, warning] }
+    WorkspaceSummary:
+      type: object
+      required: [id, name, role, plan, entitlements]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        role: { type: string, enum: [OWNER, ADMIN, OPERATOR, VIEWER] }
+        plan: { type: string, enum: [STARTER, PRO, BUSINESS] }
+        entitlements: { $ref: "#/components/schemas/Entitlements" }
+    Entitlements:
+      type: object
+      required: [activeEvents, templates, members]
+      properties:
+        activeEvents: { type: integer }
+        templates: { type: integer }
+        members: { type: integer }
+    TimerTemplate:
+      type: object
+      required: [id, workspaceId, name, definition, createdByUserId, createdAt, updatedAt]
+      properties:
+        id: { type: string }
+        workspaceId: { type: string }
+        name: { type: string }
+        description: { type: ["string", "null"] }
+        definition: {}
+        createdByUserId: { type: string }
+        createdAt: { type: string }
+        updatedAt: { type: string }
+    TimerTemplateInput:
+      type: object
+      required: [name, definition]
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: ["string", "null"] }
+        definition: {}
+    TimerTemplateUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 120 }
+        description: { type: ["string", "null"] }
+        definition: {}
+    TeamMember:
+      type: object
+      required: [id, userId, role, createdAt]
+      properties:
+        id: { type: string }
+        userId: { type: string }
+        role: { type: string, enum: [OWNER, ADMIN, OPERATOR, VIEWER] }
+        createdAt: { type: string }
+        displayName: { type: ["string", "null"] }
+        email: { type: ["string", "null"] }
+    TeamMemberRoleUpdate:
+      type: object
+      required: [role]
+      properties:
+        role: { type: string, enum: [ADMIN, OPERATOR, VIEWER] }
+    Invitation:
+      type: object
+      required: [id, email, role, expiresAt, createdAt]
+      properties:
+        id: { type: string }
+        email: { type: string }
+        role: { type: string, enum: [ADMIN, OPERATOR, VIEWER] }
+        expiresAt: { type: string }
+        revokedAt: { type: ["string", "null"] }
+        acceptedAt: { type: ["string", "null"] }
+        createdAt: { type: string }
+    InvitationInput:
+      type: object
+      required: [email, role]
+      properties:
+        email: { type: string, format: email }
+        role: { type: string, enum: [ADMIN, OPERATOR, VIEWER] }
+        expiresInDays: { type: integer, minimum: 1, maximum: 30 }
+    AuditLog:
+      type: object
+      required: [id, action, entityType, createdAt]
+      properties:
+        id: { type: string }
+        action: { type: string }
+        entityType: { type: string }
+        entityId: { type: ["string", "null"] }
+        actorUserId: { type: ["string", "null"] }
+        createdAt: { type: string }
+        metadata: {}
+    BillingEntitlement:
+      type: object
+      required: [plan, status, entitlements, upgradesAvailable]
+      properties:
+        plan: { type: string, enum: [STARTER, PRO, BUSINESS] }
+        status: { type: string }
+        entitlements: { $ref: "#/components/schemas/Entitlements" }
+        upgradesAvailable: { type: boolean }
 

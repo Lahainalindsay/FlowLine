@@ -165,7 +165,11 @@ export interface LiveSession {
   activeItemId: string | null;
   remainingSeconds: number;
   elapsedSeconds: number;
+  /** Server timestamp at which remainingSeconds and elapsedSeconds were captured */
+  timerAnchorAt: string;
   serverTime: string;
+  /** @minimum 0 */
+  revision: number;
   /** @nullable */
   startedAt?: string | null;
   /** @nullable */
@@ -367,9 +371,11 @@ export const SessionControlAction = {
   pause: 'pause',
   resume: 'resume',
   reset: 'reset',
+  complete: 'complete',
   add_time: 'add_time',
   subtract_time: 'subtract_time',
   next: 'next',
+  next_session: 'next_session',
   previous: 'previous',
   restart: 'restart',
   jump: 'jump',
@@ -377,10 +383,23 @@ export const SessionControlAction = {
 
 export interface SessionControl {
   action: SessionControlAction;
+  /** @minimum 0 */
+  expectedRevision: number;
+  /**
+     * Client-generated idempotency key scoped to this event
+     * @minLength 1
+     * @maxLength 128
+     */
+  commandId: string;
   /** @minimum 1 */
   amountSeconds?: number;
   /** @nullable */
   itemId?: string | null;
+}
+
+export interface LiveSessionConflict {
+  error: string;
+  session: LiveSession;
 }
 
 export type OperatorMessagePriority = typeof OperatorMessagePriority[keyof typeof OperatorMessagePriority];
@@ -452,6 +471,175 @@ export interface DashboardSummary {
   totalEvents: number;
   minutesOnAir: number;
   recentActivity: Activity[];
+}
+
+export type WorkspaceSummaryRole = typeof WorkspaceSummaryRole[keyof typeof WorkspaceSummaryRole];
+
+
+export const WorkspaceSummaryRole = {
+  OWNER: 'OWNER',
+  ADMIN: 'ADMIN',
+  OPERATOR: 'OPERATOR',
+  VIEWER: 'VIEWER',
+} as const;
+
+export type WorkspaceSummaryPlan = typeof WorkspaceSummaryPlan[keyof typeof WorkspaceSummaryPlan];
+
+
+export const WorkspaceSummaryPlan = {
+  STARTER: 'STARTER',
+  PRO: 'PRO',
+  BUSINESS: 'BUSINESS',
+} as const;
+
+export interface Entitlements {
+  activeEvents: number;
+  templates: number;
+  members: number;
+}
+
+export interface WorkspaceSummary {
+  id: string;
+  name: string;
+  role: WorkspaceSummaryRole;
+  plan: WorkspaceSummaryPlan;
+  entitlements: Entitlements;
+}
+
+export interface TimerTemplate {
+  id: string;
+  workspaceId: string;
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  definition: unknown;
+  createdByUserId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TimerTemplateInput {
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  name: string;
+  /** @nullable */
+  description?: string | null;
+  definition: unknown;
+}
+
+export interface TimerTemplateUpdate {
+  /**
+     * @minLength 1
+     * @maxLength 120
+     */
+  name?: string;
+  /** @nullable */
+  description?: string | null;
+  definition?: unknown;
+}
+
+export type TeamMemberRole = typeof TeamMemberRole[keyof typeof TeamMemberRole];
+
+
+export const TeamMemberRole = {
+  OWNER: 'OWNER',
+  ADMIN: 'ADMIN',
+  OPERATOR: 'OPERATOR',
+  VIEWER: 'VIEWER',
+} as const;
+
+export interface TeamMember {
+  id: string;
+  userId: string;
+  role: TeamMemberRole;
+  createdAt: string;
+  /** @nullable */
+  displayName?: string | null;
+  /** @nullable */
+  email?: string | null;
+}
+
+export type TeamMemberRoleUpdateRole = typeof TeamMemberRoleUpdateRole[keyof typeof TeamMemberRoleUpdateRole];
+
+
+export const TeamMemberRoleUpdateRole = {
+  ADMIN: 'ADMIN',
+  OPERATOR: 'OPERATOR',
+  VIEWER: 'VIEWER',
+} as const;
+
+export interface TeamMemberRoleUpdate {
+  role: TeamMemberRoleUpdateRole;
+}
+
+export type InvitationRole = typeof InvitationRole[keyof typeof InvitationRole];
+
+
+export const InvitationRole = {
+  ADMIN: 'ADMIN',
+  OPERATOR: 'OPERATOR',
+  VIEWER: 'VIEWER',
+} as const;
+
+export interface Invitation {
+  id: string;
+  email: string;
+  role: InvitationRole;
+  expiresAt: string;
+  /** @nullable */
+  revokedAt?: string | null;
+  /** @nullable */
+  acceptedAt?: string | null;
+  createdAt: string;
+}
+
+export type InvitationInputRole = typeof InvitationInputRole[keyof typeof InvitationInputRole];
+
+
+export const InvitationInputRole = {
+  ADMIN: 'ADMIN',
+  OPERATOR: 'OPERATOR',
+  VIEWER: 'VIEWER',
+} as const;
+
+export interface InvitationInput {
+  email: string;
+  role: InvitationInputRole;
+  /**
+     * @minimum 1
+     * @maximum 30
+     */
+  expiresInDays?: number;
+}
+
+export interface AuditLog {
+  id: string;
+  action: string;
+  entityType: string;
+  /** @nullable */
+  entityId?: string | null;
+  /** @nullable */
+  actorUserId?: string | null;
+  createdAt: string;
+  metadata?: unknown;
+}
+
+export type BillingEntitlementPlan = typeof BillingEntitlementPlan[keyof typeof BillingEntitlementPlan];
+
+
+export const BillingEntitlementPlan = {
+  STARTER: 'STARTER',
+  PRO: 'PRO',
+  BUSINESS: 'BUSINESS',
+} as const;
+
+export interface BillingEntitlement {
+  plan: BillingEntitlementPlan;
+  status: string;
+  entitlements: Entitlements;
+  upgradesAvailable: boolean;
 }
 
 /**
