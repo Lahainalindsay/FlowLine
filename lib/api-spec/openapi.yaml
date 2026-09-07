@@ -515,6 +515,30 @@ paths:
       summary: Get persisted billing state and entitlements
       responses:
         "200": { description: Billing state, content: { application/json: { schema: { $ref: "#/components/schemas/BillingEntitlement" } } } }
+  /billing/checkout:
+    post:
+      operationId: createBillingCheckout
+      tags: [workspace]
+      summary: Create an allowlisted StageTime subscription checkout session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BillingCheckoutInput" }
+      responses:
+        "200": { description: Checkout session, content: { application/json: { schema: { $ref: "#/components/schemas/BillingSession" } } } }
+  /billing/portal:
+    post:
+      operationId: createBillingPortal
+      tags: [workspace]
+      summary: Create a Stripe customer portal session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/BillingPortalInput" }
+      responses:
+        "200": { description: Portal session, content: { application/json: { schema: { $ref: "#/components/schemas/BillingSession" } } } }
 components:
   parameters:
     EventId:
@@ -928,10 +952,28 @@ components:
         metadata: {}
     BillingEntitlement:
       type: object
-      required: [plan, status, entitlements, upgradesAvailable]
+      required: [plan, status, entitlements, upgradesAvailable, billingManagementRequired]
       properties:
         plan: { type: string, enum: [STARTER, PRO, BUSINESS] }
         status: { type: string }
         entitlements: { $ref: "#/components/schemas/Entitlements" }
         upgradesAvailable: { type: boolean }
+        billingManagementRequired: { type: boolean }
+    BillingCheckoutInput:
+      type: object
+      required: [plan, successUrl, cancelUrl]
+      properties:
+        plan: { type: string, enum: [PRO, BUSINESS] }
+        successUrl: { type: string, format: uri }
+        cancelUrl: { type: string, format: uri }
+    BillingPortalInput:
+      type: object
+      required: [returnUrl]
+      properties:
+        returnUrl: { type: string, format: uri }
+    BillingSession:
+      type: object
+      required: [url]
+      properties:
+        url: { type: string, format: uri }
 

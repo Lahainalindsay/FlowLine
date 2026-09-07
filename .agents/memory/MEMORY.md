@@ -1,0 +1,1 @@
+- [Stripe proxy-only billing](stripe-proxy-billing.md) — use connector-native Stripe access and canonical event retrieval when raw credentials are intentionally unavailable.

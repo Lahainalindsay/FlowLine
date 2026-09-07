@@ -21,7 +21,8 @@ const permissions = {
   "template:write": ["OWNER", "ADMIN", "OPERATOR"],
   "team:read": ["OWNER", "ADMIN"],
   "team:manage": ["OWNER", "ADMIN"],
-  "billing:read": ["OWNER"],
+  "billing:read": ["OWNER", "ADMIN"],
+  "billing:manage": ["OWNER", "ADMIN"],
   "audit:read": ["OWNER", "ADMIN"],
 } as const satisfies Record<string, readonly WorkspaceRole[]>;
 

@@ -13,4 +13,5 @@ export interface BillingEntitlement {
   status: string;
   entitlements: Entitlements;
   upgradesAvailable: boolean;
+  billingManagementRequired: boolean;
 }

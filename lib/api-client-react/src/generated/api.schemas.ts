@@ -640,6 +640,29 @@ export interface BillingEntitlement {
   status: string;
   entitlements: Entitlements;
   upgradesAvailable: boolean;
+  billingManagementRequired: boolean;
+}
+
+export type BillingCheckoutInputPlan = typeof BillingCheckoutInputPlan[keyof typeof BillingCheckoutInputPlan];
+
+
+export const BillingCheckoutInputPlan = {
+  PRO: 'PRO',
+  BUSINESS: 'BUSINESS',
+} as const;
+
+export interface BillingCheckoutInput {
+  plan: BillingCheckoutInputPlan;
+  successUrl: string;
+  cancelUrl: string;
+}
+
+export interface BillingPortalInput {
+  returnUrl: string;
+}
+
+export interface BillingSession {
+  url: string;
 }
 
 /**

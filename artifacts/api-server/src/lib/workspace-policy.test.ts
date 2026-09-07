@@ -6,7 +6,7 @@ test("role permissions distinguish viewers, operators, and owners", () => {
   assert.equal(roleCan("VIEWER", "event:read"), true);
   assert.equal(roleCan("VIEWER", "event:write"), false);
   assert.equal(roleCan("OPERATOR", "live:control"), true);
-  assert.equal(roleCan("ADMIN", "billing:read"), false);
+  assert.equal(roleCan("ADMIN", "billing:read"), true);
   assert.equal(roleCan("OWNER", "billing:read"), true);
 });
 

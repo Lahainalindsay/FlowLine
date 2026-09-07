@@ -988,7 +988,34 @@ export const GetBillingEntitlementResponse = zod.object({
   "templates": zod.int(),
   "members": zod.int()
 }),
-  "upgradesAvailable": zod.boolean()
+  "upgradesAvailable": zod.boolean(),
+  "billingManagementRequired": zod.boolean()
+})
+
+
+/**
+ * @summary Create an allowlisted StageTime subscription checkout session
+ */
+export const CreateBillingCheckoutBody = zod.object({
+  "plan": zod.enum(['PRO', 'BUSINESS']),
+  "successUrl": zod.url(),
+  "cancelUrl": zod.url()
+})
+
+export const CreateBillingCheckoutResponse = zod.object({
+  "url": zod.url()
+})
+
+
+/**
+ * @summary Create a Stripe customer portal session
+ */
+export const CreateBillingPortalBody = zod.object({
+  "returnUrl": zod.url()
+})
+
+export const CreateBillingPortalResponse = zod.object({
+  "url": zod.url()
 })
 
 
