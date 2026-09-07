@@ -1,0 +1,874 @@
+You are a senior full-stack SaaS engineer, real-time systems architect, database architect, security engineer, Stripe billing engineer, DevOps engineer, accessibility specialist, and production QA engineer.
+
+I have an existing premium front-end for a SaaS product called StageTime, a professional live event timing platform for producers, speakers, venues, educators, agencies, and event teams.
+
+IMPORTANT:
+Do not redesign the product.
+Do not replace the existing visual language.
+Do not simplify the current front-end into a generic dashboard.
+Preserve the premium dark visual design, typography, spacing, pricing structure, timer presentation, landing-page hierarchy, dashboard concepts, and responsive behavior.
+
+Your job is to turn the existing prototype into a production-ready full-stack SaaS application.
+
+CORE PRODUCT PURPOSE
+
+StageTime lets an authenticated user create live events, create timed sessions, control countdown/count-up timers, and synchronize the authoritative timer state in real time across operator devices and public display screens.
+
+The system must be robust enough for real live-event use.
+
+TECHNICAL GOAL
+
+Inspect the existing Replit project first.
+
+Keep any code that is already production quality.
+
+Refactor or replace weak prototype code where necessary.
+
+Choose a clean production-ready stack that works reliably on Replit. Prefer:
+
+* TypeScript
+* React or Next.js if the current project supports it
+* Node.js backend
+* PostgreSQL
+* Prisma or Drizzle ORM
+* WebSockets, Socket.IO, or another appropriate realtime transport
+* Stripe for subscriptions
+* secure server-side authentication
+* Zod or equivalent request validation
+
+Do not store important production state only in browser memory or localStorage.
+
+ARCHITECTURE
+
+Build the application around:
+
+1. Marketing website
+2. Authentication system
+3. User dashboard
+4. Workspaces
+5. Events
+6. Sessions/cues
+7. Real-time timer engine
+8. Operator control room
+9. Public/display mode
+10. Templates
+11. Team management
+12. Subscription billing
+13. Account/settings
+14. Administrative safeguards
+15. Monitoring and error handling
+
+AUTHENTICATION
+
+Implement real authentication.
+
+Required flows:
+
+* Sign up
+* Log in
+* Log out
+* Persistent authenticated sessions
+* Email verification architecture
+* Forgot password
+* Password reset
+* Protected application routes
+* Change password
+* Account settings
+* Secure cookies
+* HttpOnly cookies where appropriate
+* SameSite protections
+* Appropriate CSRF protections
+* Server-side authorization on every protected operation
+
+Never rely solely on hiding UI buttons for authorization.
+
+DATABASE
+
+Use PostgreSQL.
+
+Create a proper relational schema for at least:
+
+User
+Workspace
+WorkspaceMember
+Subscription
+Event
+EventSession
+TimerState
+TimerPreset
+DisplayLink
+AuditLog
+Invitation
+
+Suggested relationships:
+
+A user can belong to multiple workspaces.
+
+A workspace has one subscription.
+
+A workspace owns events.
+
+An event contains multiple ordered sessions.
+
+Sessions contain timer configuration.
+
+Timer state represents the current authoritative running state.
+
+Workspace members have roles.
+
+Invitations allow adding team members.
+
+Audit logs record important production actions.
+
+Add timestamps, IDs, ownership fields, indexes, and foreign-key constraints.
+
+Use UUIDs or another safe non-sequential public identifier for externally exposed resources.
+
+WORKSPACE ROLES
+
+Support roles such as:
+
+OWNER
+ADMIN
+OPERATOR
+VIEWER
+
+OWNER:
+Full workspace and billing control.
+
+ADMIN:
+Manage events, members, templates, and most settings.
+
+OPERATOR:
+Run timers and manage event sessions but cannot control billing or ownership.
+
+VIEWER:
+Read-only access.
+
+All permissions must be enforced server-side.
+
+EVENT SYSTEM
+
+Authenticated users must be able to:
+
+* Create an event
+* Rename event
+* Duplicate event
+* Archive event
+* Delete event with confirmation
+* Open event dashboard
+* Set event date
+* Set venue/location
+* Configure branding
+* Add event description
+* Create sessions
+* Reorder sessions
+* Duplicate sessions
+* Delete sessions
+* Save sessions as templates
+
+Each event should support statuses such as:
+
+DRAFT
+READY
+LIVE
+COMPLETED
+ARCHIVED
+
+SESSION/TIMER TYPES
+
+Support at least:
+
+Countdown
+Count up
+Break timer
+Open-ended timer
+
+Session fields should include:
+
+* title
+* speaker name
+* duration
+* timer mode
+* warning threshold
+* critical threshold
+* notes
+* display message
+* sort order
+
+REAL-TIME TIMER ENGINE
+
+This is one of the most important parts of the application.
+
+The server must be authoritative.
+
+Do not implement the production timer by decrementing a database integer every second.
+
+Instead persist enough state to calculate accurate elapsed/remaining time from timestamps.
+
+Suggested timer state fields:
+
+status
+configuredDurationMs
+startedAt
+pausedAt
+accumulatedElapsedMs
+lastCommandAt
+version
+
+Statuses:
+
+IDLE
+RUNNING
+PAUSED
+COMPLETED
+
+For a countdown:
+
+remaining time should be derived from server timestamps.
+
+For a count-up timer:
+
+elapsed time should be derived from server timestamps.
+
+Timer commands must include:
+
+START
+PAUSE
+RESUME
+RESET
+COMPLETE
+ADD_TIME
+SUBTRACT_TIME
+NEXT_SESSION
+
+Clients should receive authoritative state from the server.
+
+All connected displays must derive the visible timer from that authoritative state.
+
+Implement protection against conflicting commands from multiple operators.
+
+Use monotonic/version sequencing or another concurrency-safe design.
+
+REAL-TIME SYNCHRONIZATION
+
+Use WebSockets or another suitable realtime system.
+
+Connected clients must receive:
+
+* current timer state
+* timer start
+* pause
+* resume
+* reset
+* session change
+* message change
+* connection state
+* relevant branding changes
+
+When a device reconnects, it must request/receive the current authoritative state.
+
+A user joining an event after the timer has already started must immediately see the correct time.
+
+Do not depend on when that browser opened.
+
+Provide:
+
+CONNECTED
+RECONNECTING
+OFFLINE
+
+UI states.
+
+PUBLIC DISPLAY MODE
+
+Create a dedicated display URL.
+
+Example concept:
+
+/display/:publicToken
+
+The public display should:
+
+* not expose dashboard controls
+* work without requiring audience users to log in
+* only reveal information explicitly intended for display
+* show the synchronized timer
+* show session title
+* optionally show speaker
+* optionally show custom messaging
+* support fullscreen
+* remain readable at venue distance
+* respond well to projector and LED-wall resolutions
+* have warning and overtime states
+* support dark and light/custom brand configurations
+
+Display links must use secure unguessable public tokens.
+
+Allow the workspace to revoke/regenerate display links.
+
+OPERATOR CONTROL ROOM
+
+Build the real application behind the existing premium dashboard concept.
+
+The control room should include:
+
+* current event
+* current session
+* large authoritative timer
+* start
+* pause/resume
+* reset
+* complete
+* next session
+* add 30 seconds
+* add 1 minute
+* subtract time
+* session queue
+* previous/current/next session
+* connection health
+* number of connected displays
+* event live status
+* optional production notes
+
+Destructive actions such as Reset should require appropriate confirmation.
+
+Provide useful keyboard shortcuts, but do not allow shortcuts to trigger while a user is typing into a form field.
+
+TEMPLATES
+
+Allow users to save reusable timer/session templates.
+
+Examples:
+
+5 minute presentation
+10 minute keynote
+15 minute Q&A
+30 minute panel
+2 minute break
+60 second speaker warning
+
+Paid tiers may have higher or unlimited template counts.
+
+TEAM COLLABORATION
+
+Business/team workspaces should support:
+
+* invite by email
+* role assignment
+* remove member
+* change member role
+* pending invitations
+* invitation expiration
+* invitation revocation
+* member seat limits
+
+BILLING
+
+Use Stripe.
+
+Implement:
+
+* Stripe Checkout
+* Stripe Customer Portal
+* webhook endpoint
+* verified webhook signatures
+* subscription database synchronization
+* product/price mapping
+* upgrade
+* downgrade
+* cancellation
+* renewal
+* failed payment handling
+* trial architecture if useful
+* billing status shown in account UI
+
+Never trust plan status sent by the browser.
+
+Feature entitlements must be checked server-side.
+
+PLANS
+
+Use these initial plans unless implementation constraints strongly require otherwise.
+
+STARTER — FREE
+
+$0/month
+
+Features:
+
+* up to 3 active events
+* basic countdown
+* basic count-up
+* 1 operator
+* fullscreen public display
+* limited templates
+* StageTime branding
+
+PRO
+
+$19/month
+
+Features:
+
+* unlimited events
+* advanced timer sequences
+* custom branding
+* event history
+* exports
+* up to 5 operators
+* more templates
+* priority support
+* advanced display controls
+
+BUSINESS
+
+$59/month
+
+Features:
+
+* everything in Pro
+* up to 15 team members
+* role-based access
+* shared templates
+* audit logs
+* expanded event limits
+* organization/team workspace features
+* higher display/operator limits
+
+Implement plan entitlements in a centralized server-side feature system.
+
+Do not scatter hard-coded plan checks randomly throughout the codebase.
+
+DOWNGRADE HANDLING
+
+Do not delete customer data immediately when they downgrade.
+
+If a workspace exceeds the new plan limits:
+
+* retain existing records
+* prevent creation beyond the new limit
+* clearly explain which limit is exceeded
+* allow the customer to upgrade again
+
+STRIPE SECURITY
+
+Never expose Stripe secret keys in frontend code.
+
+Use environment variables.
+
+Add a documented list of required environment variables.
+
+Do not hardcode test or production secrets.
+
+AUDIT LOGS
+
+For Business plans, record important actions such as:
+
+timer started
+timer paused
+timer reset
+session changed
+event created
+event deleted
+member invited
+member removed
+role changed
+display link regenerated
+subscription-related administrative actions
+
+Log:
+
+actor
+action
+resource
+timestamp
+relevant metadata
+
+Do not log passwords, authentication tokens, payment card information, or secrets.
+
+SECURITY
+
+Perform a full security review.
+
+Implement:
+
+* input validation
+* output encoding
+* secure password handling
+* permission checks
+* rate limiting
+* secure session handling
+* safe error messages
+* safe CORS configuration
+* CSRF protection as appropriate
+* SQL-injection prevention through ORM/query parameterization
+* XSS protections
+* webhook verification
+* safe redirect handling
+* appropriate security headers
+* environment variable validation
+
+Do not expose stack traces to production users.
+
+RATE LIMITING
+
+Apply sensible limits to:
+
+* login
+* signup
+* forgot password
+* password reset
+* invitation creation
+* public API endpoints
+* high-frequency administrative actions
+
+Do not rate-limit normal timer synchronization in a way that would break live events.
+
+RELIABILITY
+
+Timer state is mission-critical.
+
+The application must survive:
+
+* browser refresh
+* phone sleep/wake
+* brief network outage
+* reconnect
+* operator device switching
+* public display refresh
+* server process restart where practical
+* multiple simultaneous viewers
+
+Persist authoritative timer state in PostgreSQL or another durable mechanism.
+
+Do not require the original operator browser to remain open.
+
+PERFORMANCE
+
+Optimize for:
+
+* fast initial loading
+* low realtime latency
+* minimal unnecessary re-renders
+* responsive dashboard operation
+* mobile devices
+* unstable venue Wi-Fi
+
+Do not broadcast unnecessary high-frequency timer ticks from the server.
+
+Broadcast timer state changes and let clients calculate visual time locally using synchronized authoritative timestamps.
+
+Periodically resynchronize as needed.
+
+ACCESSIBILITY
+
+Target WCAG 2.2 AA where practical.
+
+Include:
+
+* keyboard navigation
+* visible focus states
+* semantic HTML
+* form labels
+* error descriptions
+* sufficient color contrast
+* reduced-motion support
+* screen-reader-friendly controls
+* status text in addition to color
+* accessible confirmation dialogs
+
+Do not send screen-reader announcements every second for the timer.
+
+Use sensible milestone announcements instead.
+
+RESPONSIVE DESIGN
+
+Preserve the premium existing design.
+
+Test:
+
+* mobile phone
+* tablet
+* laptop
+* desktop
+* wide production monitor
+* projector/display output
+
+The operator controls must remain usable on touch screens.
+
+MARKETING WEBSITE
+
+Keep the existing premium StageTime marketing presentation.
+
+Maintain sections for:
+
+* hero
+* benefits
+* features
+* product preview
+* pricing
+* signup
+* login
+* account/billing
+* CTA
+* footer
+
+Convert placeholder interactions into actual routes and functionality.
+
+APPLICATION ROUTES
+
+Create a clean route structure along these lines:
+
+/
+/pricing
+/login
+/signup
+/forgot-password
+/reset-password
+/verify-email
+
+/app
+/app/events
+/app/events/new
+/app/events/:eventId
+/app/events/:eventId/control
+/app/events/:eventId/sessions
+/app/templates
+/app/team
+/app/billing
+/app/settings
+
+/display/:publicToken
+
+Adjust route structure if the existing framework requires a better convention.
+
+ONBOARDING
+
+After signup:
+
+1. Create the user's workspace
+2. Ask for workspace/event name
+3. Create first event
+4. Create first timer/session
+5. Show how to open a display screen
+6. Take the user to the operator control room
+
+Keep onboarding short and polished.
+
+EMPTY STATES
+
+Do not show empty generic pages.
+
+Create helpful empty states for:
+
+* no events
+* no templates
+* no team members
+* no event history
+* no sessions
+
+Each should contain a meaningful next action.
+
+ERROR STATES
+
+Implement polished handling for:
+
+* network offline
+* realtime connection lost
+* event not found
+* invalid display token
+* expired invitation
+* unauthorized action
+* payment problem
+* server error
+* missing configuration
+
+Avoid browser alert() for production UX.
+
+Use proper application dialogs/toasts.
+
+ADMINISTRATION
+
+Do not build an excessive internal admin panel unless necessary.
+
+At minimum, ensure the codebase can safely support:
+
+* account lookup
+* subscription troubleshooting
+* workspace status review
+* basic operational debugging
+
+PRIVACY
+
+Do not collect unnecessary personal data.
+
+Create usable placeholders/routes for:
+
+Privacy Policy
+Terms of Service
+
+Do not fabricate legal claims.
+
+Clearly mark legal text as requiring final review if it is only placeholder copy.
+
+OBSERVABILITY
+
+Add:
+
+* structured server logging
+* request IDs where useful
+* error boundaries
+* database error logging
+* realtime connection logging
+* Stripe webhook logging without sensitive values
+* health endpoint
+
+Suggested health route:
+
+/api/health
+
+It should verify that the application process is running and ideally validate essential dependencies without leaking secrets.
+
+ENVIRONMENT VARIABLES
+
+Create an .env.example.
+
+Document all required values.
+
+Likely values include:
+
+DATABASE_URL
+SESSION_SECRET or auth secrets
+APP_URL
+STRIPE_SECRET_KEY
+STRIPE_WEBHOOK_SECRET
+STRIPE_PRO_PRICE_ID
+STRIPE_BUSINESS_PRICE_ID
+email provider credentials if implemented
+
+Never commit actual secrets.
+
+TESTING
+
+Add meaningful automated tests.
+
+At minimum test:
+
+Authentication authorization
+Workspace permissions
+Plan entitlements
+Timer calculations
+Pause/resume behavior
+Reconnect reconstruction
+Concurrent timer commands
+Stripe webhook event handling
+Display token authorization
+
+Create unit tests for timer calculations because timer correctness is critical.
+
+Also create integration tests for important API workflows.
+
+QUALITY ASSURANCE
+
+Before saying the project is finished, test all primary flows manually.
+
+Required final QA flow:
+
+1. New user signup
+2. Login
+3. Workspace creation
+4. Event creation
+5. Session creation
+6. Start countdown
+7. Open display URL in a second browser/device
+8. Confirm synchronization
+9. Pause timer
+10. Confirm display pauses correctly
+11. Resume timer
+12. Refresh display
+13. Confirm correct time recovers
+14. Add another session
+15. Move to next session
+16. Invite a team member
+17. Confirm permissions
+18. Start Stripe Checkout in test mode
+19. Complete a test subscription
+20. Confirm plan upgrade through webhook
+21. Open billing portal
+22. Cancel/downgrade test subscription
+23. Confirm entitlement changes
+24. Log out
+25. Confirm protected routes reject access
+
+DEPLOYMENT
+
+Prepare the project to deploy on Replit.
+
+Ensure:
+
+* production build command works
+* start command works
+* database migrations are documented
+* required environment variables are documented
+* Stripe webhook URL is documented
+* no development-only URLs remain
+* no secrets are committed
+* no console debug noise remains
+* no broken links remain
+* no placeholder fake account data remains in logged-in UI
+* favicon and metadata are present
+* 404/error states are polished
+
+IMPORTANT IMAGE REQUIREMENT
+
+The existing front-end currently uses generated event-stage imagery.
+
+If that image is being loaded from a temporary signed OpenAI URL, do not leave the production application dependent on that temporary URL.
+
+Download/store the approved image as a proper project/static asset or replace it with a durable production-hosted asset while preserving the approved visual appearance.
+
+DO NOT:
+
+* merely add fake authentication
+* simulate Stripe payments
+* store subscriptions only in localStorage
+* make timer state client-only
+* require one browser tab to remain open for timers to function
+* expose private event data through public display URLs
+* put authorization logic only in frontend components
+* leave TODO placeholders for critical security
+* report completion without testing the flows
+* dramatically redesign the approved interface
+
+DELIVERABLE
+
+Finish the actual application, not just an architecture proposal.
+
+At the end:
+
+1. Run the application
+2. Fix compile/runtime errors
+3. Run migrations
+4. Run tests
+5. Inspect primary pages
+6. Verify mobile responsiveness
+7. Verify realtime timer behavior
+8. Verify production environment validation
+9. Verify Stripe test-mode integration once keys are supplied
+
+Then provide me with a concise launch report containing:
+
+* architecture used
+* database schema summary
+* authentication method
+* realtime method
+* Stripe implementation
+* plan entitlement system
+* security measures
+* tests added
+* required environment variables
+* anything I still need to configure manually
+* exact deployment steps
+
+Do not stop after scaffolding. Continue through implementation and QA until the project is functionally production-ready, except for external credentials that only I can supply.

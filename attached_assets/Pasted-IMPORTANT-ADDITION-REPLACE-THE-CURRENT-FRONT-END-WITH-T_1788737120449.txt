@@ -1,0 +1,465 @@
+IMPORTANT ADDITION — REPLACE THE CURRENT FRONT END WITH THE APPROVED STAGETIME DESIGN AND SYNC THE FINISHED APP TO THE CONNECTED GIT REPOSITORY
+
+The existing Replit project may already contain a similar live-event timing application.
+
+I have now chosen a new approved visual/product direction.
+
+The approved StageTime design is the new source of truth for the front-end experience:
+
+https://designergpt.replit.app/pages/386b44c8867a83e757673116b84e75cc.html
+
+You must update the EXISTING Replit project to match this approved design direction while implementing the production backend requirements from my previous prompt.
+
+Do NOT create a separate unrelated application inside the repository.
+
+Do NOT leave the old UI as the primary product.
+
+Do NOT keep two competing versions of the application.
+
+The finished repository should contain ONE cohesive StageTime product.
+
+DESIGN PRIORITY
+
+Use the approved StageTime design as the primary visual reference.
+
+Preserve and recreate its:
+
+* dark premium event-production aesthetic
+* blue/cyan lighting treatment
+* high-end SaaS feel
+* StageTime branding
+* large typography
+* cinematic hero presentation
+* premium spacing
+* rounded panels
+* subtle glass/translucent surfaces
+* gradient accents
+* polished timer presentation
+* operator-dashboard visual language
+* premium pricing cards
+* account and billing styling
+* responsive behavior
+* clean stage/display presentation
+
+The final product should feel like a high-end commercial SaaS product, not a generic starter template or default component library demo.
+
+EXISTING PROJECT MIGRATION
+
+Before changing anything:
+
+1. Inspect the entire existing codebase.
+2. Identify the framework, routing system, backend architecture, database layer, authentication implementation, realtime implementation, billing code, and existing reusable business logic.
+3. Preserve production-quality backend/business logic where it is useful.
+4. Preserve existing database data structures where migration is safer than destructive replacement.
+5. Replace weak, outdated, generic, or conflicting front-end code with the approved StageTime experience.
+6. Refactor architecture where needed so the result is one coherent production application.
+
+The goal is NOT to throw away good backend logic unnecessarily.
+
+The goal IS to replace the existing user-facing design and experience with the approved StageTime product while keeping or improving any solid infrastructure already present.
+
+FRONT-END REPLACEMENT
+
+Treat the currently approved StageTime design as the new front-end specification.
+
+Rebuild the existing app so that the following areas use the StageTime design system consistently:
+
+* public landing page
+* navigation
+* pricing
+* login
+* signup
+* forgot password
+* account creation
+* onboarding
+* application dashboard
+* events list
+* event creation
+* event editor
+* operator control room
+* timer controls
+* session queue
+* display management
+* public display mode
+* templates
+* team management
+* billing
+* account settings
+* subscription upgrade/downgrade flows
+* empty states
+* loading states
+* error states
+* dialogs
+* notifications
+* mobile layouts
+* tablet layouts
+
+Do not merely embed or iframe the reference URL.
+
+Recreate the design as native application code inside this repository.
+
+Do not copy temporary image URLs directly into production.
+
+APPROVED IMAGE ASSET
+
+The design reference includes AI-generated event/stage imagery.
+
+If the existing project contains the approved image asset, use it.
+
+If the current design references a temporary signed image URL, replace that with a durable local/static asset in the repository or another stable production asset.
+
+Do not ship temporary OpenAI signed URLs.
+
+DESIGN SYSTEM
+
+Create a reusable StageTime design system instead of scattering styling across random pages.
+
+Centralize:
+
+* colors
+* typography
+* spacing
+* border radii
+* shadows
+* gradients
+* buttons
+* inputs
+* cards
+* dialogs
+* status colors
+* timer warning colors
+* layout widths
+* breakpoints
+
+Use reusable components where appropriate.
+
+Examples:
+
+Button
+Card
+Input
+Modal/Dialog
+Badge
+PlanCard
+TimerDisplay
+TimerControls
+SessionCard
+ConnectionStatus
+Sidebar
+TopNavigation
+EmptyState
+UpgradePrompt
+Toast
+ConfirmDialog
+
+Do not over-engineer trivial components.
+
+RESPONSIVE DESIGN
+
+The approved premium look must survive on:
+
+* mobile
+* tablet
+* laptop
+* desktop
+* ultrawide monitor
+* venue display
+* projector
+
+Do not treat mobile as an afterthought.
+
+OPERATOR EXPERIENCE
+
+The operator control room should receive particular attention.
+
+It should visually match the StageTime direction and feel suitable for use during a live production.
+
+Prioritize:
+
+* large timer
+* obvious timer state
+* start/pause/resume controls
+* reset safeguards
+* current session
+* previous/current/next context
+* live connection status
+* display count
+* warning states
+* overtime state
+* session queue
+* fast touch targets
+* keyboard support
+
+PUBLIC DISPLAY EXPERIENCE
+
+The public display should feel even cleaner than the dashboard.
+
+No application navigation.
+
+No account controls.
+
+No unnecessary UI.
+
+Only production-relevant content.
+
+Support:
+
+* fullscreen
+* countdown
+* count-up
+* speaker/session title
+* warning state
+* critical state
+* overtime
+* optional production message
+* optional branding
+
+Existing backend realtime functionality should feed this UI.
+
+PRESERVE FUNCTIONALITY DURING REDESIGN
+
+Do not replace working backend features with fake prototype behavior.
+
+Any existing real:
+
+* authentication
+* database persistence
+* timer logic
+* realtime communication
+* event persistence
+* subscription logic
+* permission logic
+
+should remain functional or be improved.
+
+Do not regress working functionality just to reproduce the visual design.
+
+REMOVE OLD/CONFLICTING UI
+
+After the new StageTime implementation is working:
+
+* remove obsolete pages
+* remove unused old components
+* remove abandoned CSS
+* remove duplicate layouts
+* remove old branding
+* remove dead routes
+* remove fake demo data that appears as real user data
+* remove unused dependencies where safe
+
+Do not leave the repository cluttered with an old application and a new application side by side.
+
+PRESERVE IMPORTANT DATA
+
+Do not blindly wipe the production database.
+
+If schema changes are needed:
+
+* create safe migrations
+* preserve user accounts
+* preserve workspaces
+* preserve events
+* preserve subscription records where possible
+* document unavoidable migration issues
+
+If existing records need transformation, write an explicit migration.
+
+GIT REPOSITORY REQUIREMENTS
+
+This Replit project is already connected to a Git repository.
+
+Use the EXISTING repository.
+
+Do not initialize a second Git repository.
+
+Before implementation:
+
+1. Inspect `git status`.
+2. Identify the current branch.
+3. Inspect recent commit history.
+4. Identify the configured remote.
+5. Make sure existing uncommitted user work is not accidentally destroyed without understanding it first.
+
+Preserve Git history.
+
+Do NOT force-push unless absolutely necessary.
+
+Do NOT rewrite repository history.
+
+Do NOT delete the `.git` directory.
+
+Do NOT disconnect the repository from Replit.
+
+VERSION CONTROL WORKFLOW
+
+After implementation and testing:
+
+1. Review all changed files.
+2. Ensure generated secrets are not committed.
+3. Ensure `.env` is ignored.
+4. Ensure `.env.example` contains placeholders only.
+5. Remove temporary/debug files.
+6. Run the production build.
+7. Run automated tests.
+8. Resolve errors.
+9. Inspect `git diff`.
+10. Commit the completed StageTime reconstruction.
+
+Use a descriptive commit message similar to:
+
+`feat: rebuild StageTime as production live event timing SaaS`
+
+If multiple logical commits are useful, you may make several clean commits.
+
+PUSH REQUIREMENT
+
+After the implementation passes the required checks, push the finished changes to the project's EXISTING configured Git remote and current intended branch.
+
+Before pushing:
+
+* verify the remote name and URL
+* verify the branch
+* verify there are no secrets in the commit
+* verify the production build passes
+* verify tests pass
+* verify the app starts successfully
+
+Then push normally.
+
+Do not use `git push --force`.
+
+If Git authentication or repository permissions prevent pushing, do not fake success.
+
+Instead:
+
+* leave all changes committed locally
+* report the exact Git command I need to run
+* report the branch name
+* report the commit hash
+* clearly state why the automatic push could not complete
+
+BACKUP SAFETY
+
+Because this replaces an existing interface, preserve a recoverable point before major destructive changes.
+
+Prefer one of:
+
+* create a normal backup commit of existing uncommitted work if appropriate
+* confirm the existing HEAD is already safely committed
+* create a temporary migration branch if needed
+
+Do not destroy recoverable Git history.
+
+PRODUCTION QUALITY
+
+Do not stop when the UI merely resembles the approved reference.
+
+The final repository must combine:
+
+1. the approved StageTime visual direction
+2. the production backend requirements from my previous prompt
+3. the strongest useful pieces of the existing project
+4. proper authentication
+5. Stripe subscriptions
+6. realtime authoritative timing
+7. database persistence
+8. team permissions
+9. display mode
+10. responsive production UX
+
+FINAL VERIFICATION
+
+Before considering this complete, verify:
+
+MARKETING
+
+* landing page matches approved StageTime direction
+* pricing is correct
+* CTA flows work
+* mobile layout works
+
+AUTH
+
+* signup works
+* login works
+* logout works
+* protected routes work
+* password reset architecture works
+
+EVENTS
+
+* create event
+* edit event
+* create session
+* reorder sessions
+* delete/duplicate session
+
+TIMING
+
+* start
+* pause
+* resume
+* reset
+* add time
+* subtract time
+* switch session
+* refresh while timer runs
+* reconnect while timer runs
+
+REALTIME
+
+* second browser receives correct state
+* display reconnects correctly
+* late-joining display receives correct time
+
+TEAMS
+
+* invitations
+* roles
+* permission enforcement
+
+BILLING
+
+* Free/Pro/Business entitlements
+* Checkout
+* webhook sync
+* Customer Portal
+* downgrade behavior
+
+DISPLAY
+
+* public display URL
+* fullscreen
+* warning states
+* overtime
+* branding
+
+GIT
+
+* clean repository
+* no secrets
+* production build passes
+* tests pass
+* changes committed
+* changes pushed to existing remote
+
+FINAL REPORT
+
+When finished, give me:
+
+* final Git branch
+* final commit hash
+* remote repository used
+* whether push succeeded
+* files/modules substantially replaced
+* backend features preserved from the old project
+* backend features newly implemented
+* database migrations performed
+* Stripe configuration still required from me
+* environment variables I must set
+* deployment steps
+* any remaining launch blockers
+
+Do not claim that Git was pushed unless you actually verified the push succeeded.
+
+The final result should look and feel like the approved StageTime reference while functioning as a real production-grade SaaS application.
