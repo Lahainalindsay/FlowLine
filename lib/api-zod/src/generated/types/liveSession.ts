@@ -14,7 +14,11 @@ export interface LiveSession {
   activeItemId: string | null;
   remainingSeconds: number;
   elapsedSeconds: number;
+  /** Server timestamp at which remainingSeconds and elapsedSeconds were captured */
+  timerAnchorAt: string;
   serverTime: string;
+  /** @minimum 0 */
+  revision: number;
   /** @nullable */
   startedAt?: string | null;
   /** @nullable */

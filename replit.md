@@ -1,6 +1,6 @@
-# Flowline
+# StageTime
 
-Flowline is a live event timing platform for planning a run of show, operating a server-authoritative timer, and synchronizing speaker or stage displays.
+StageTime is a live event timing platform for planning a run of show, operating a server-authoritative timer, and synchronizing speaker or stage displays.
 
 ## Run & Operate
 
@@ -9,7 +9,7 @@ Flowline is a live event timing platform for planning a run of show, operating a
 - `pnpm run build` — typecheck + build all packages
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
-- Required env: `DATABASE_URL`, `SESSION_SECRET`, and Replit-managed Clerk keys.
+- Required env: `DATABASE_URL`, `SESSION_SECRET`, `CLERK_PUBLISHABLE_KEY`, `CLERK_SECRET_KEY`, and `VITE_CLERK_PUBLISHABLE_KEY`. Copy `.env.example` for local setup; Stripe variables are documented there as pending integration only.
 
 ## Stack
 
@@ -22,8 +22,8 @@ Flowline is a live event timing platform for planning a run of show, operating a
 
 ## Where things live
 
-- `artifacts/flowline/` — React/Vite operator workspace and presentation display
-- `artifacts/api-server/src/routes/flowline.ts` — Flowline HTTP API implementation
+- `artifacts/flowline/` — StageTime React/Vite operator workspace and presentation display
+- `artifacts/api-server/src/routes/flowline.ts` — StageTime HTTP API implementation (legacy path retained for compatibility)
 - `lib/api-spec/openapi.yaml` — source-of-truth API contract
 - `lib/api-client-react/` and `lib/api-zod/` — generated clients and validation schemas
 - `lib/db/src/schema/events.ts` — event, agenda, display, and live-session persistence
@@ -49,9 +49,9 @@ Flowline is a live event timing platform for planning a run of show, operating a
 - Sign in with a private operator account; event records are isolated by Clerk user ownership.
 - Pair unauthenticated guest devices with a QR code or six-character code for read-only timer access.
 
-## User preferences
+## Migration-safe legacy identifiers
 
-- Keep Flowline original; do not copy StageTimer branding, design, copy, or trade dress.
+- User-facing branding is StageTime. Internal `flowline` package folders, API source paths, database table names, and database index names remain intentionally unchanged to preserve deployed integrations and existing data.
 
 ## Gotchas
 

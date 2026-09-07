@@ -9,6 +9,14 @@ import type { SessionControlAction } from './sessionControlAction';
 
 export interface SessionControl {
   action: SessionControlAction;
+  /** @minimum 0 */
+  expectedRevision: number;
+  /**
+     * Client-generated idempotency key scoped to this event
+     * @minLength 1
+     * @maxLength 128
+     */
+  commandId: string;
   /** @minimum 1 */
   amountSeconds?: number;
   /** @nullable */

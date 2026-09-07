@@ -20,6 +20,10 @@ export const HealthCheckResponse = zod.object({
 /**
  * @summary Get the operator dashboard summary
  */
+export const getDashboardSummaryResponseActiveEventOneTwoSessionRevisionMin = 0;
+
+
+
 export const GetDashboardSummaryResponse = zod.object({
   "upcomingEvents": zod.array(zod.object({
   "id": zod.string(),
@@ -80,7 +84,9 @@ export const GetDashboardSummaryResponse = zod.object({
   "activeItemId": zod.string().nullable(),
   "remainingSeconds": zod.int(),
   "elapsedSeconds": zod.int(),
+  "timerAnchorAt": zod.string().describe('Server timestamp at which remainingSeconds and elapsedSeconds were captured'),
   "serverTime": zod.string(),
+  "revision": zod.int().min(getDashboardSummaryResponseActiveEventOneTwoSessionRevisionMin),
   "startedAt": zod.string().nullish(),
   "pausedAt": zod.string().nullish(),
   "operatorMessage": zod.string().nullable(),
@@ -154,6 +160,10 @@ export const GetEventParams = zod.object({
   "eventId": zod.coerce.string()
 })
 
+export const getEventResponseTwoSessionRevisionMin = 0;
+
+
+
 export const GetEventResponse = zod.object({
   "id": zod.string(),
   "name": zod.string(),
@@ -199,7 +209,9 @@ export const GetEventResponse = zod.object({
   "activeItemId": zod.string().nullable(),
   "remainingSeconds": zod.int(),
   "elapsedSeconds": zod.int(),
+  "timerAnchorAt": zod.string().describe('Server timestamp at which remainingSeconds and elapsedSeconds were captured'),
   "serverTime": zod.string(),
+  "revision": zod.int().min(getEventResponseTwoSessionRevisionMin),
   "startedAt": zod.string().nullish(),
   "pausedAt": zod.string().nullish(),
   "operatorMessage": zod.string().nullable(),
@@ -546,13 +558,19 @@ export const GetLiveSessionParams = zod.object({
   "eventId": zod.coerce.string()
 })
 
+export const getLiveSessionResponseRevisionMin = 0;
+
+
+
 export const GetLiveSessionResponse = zod.object({
   "eventId": zod.string(),
   "state": zod.enum(['idle', 'running', 'paused', 'overtime', 'completed']),
   "activeItemId": zod.string().nullable(),
   "remainingSeconds": zod.int(),
   "elapsedSeconds": zod.int(),
+  "timerAnchorAt": zod.string().describe('Server timestamp at which remainingSeconds and elapsedSeconds were captured'),
   "serverTime": zod.string(),
+  "revision": zod.int().min(getLiveSessionResponseRevisionMin),
   "startedAt": zod.string().nullish(),
   "pausedAt": zod.string().nullish(),
   "operatorMessage": zod.string().nullable(),
@@ -567,14 +585,24 @@ export const ControlLiveSessionParams = zod.object({
   "eventId": zod.coerce.string()
 })
 
+export const controlLiveSessionBodyExpectedRevisionMin = 0;
+
+export const controlLiveSessionBodyCommandIdMax = 128;
+
 
 
 
 export const ControlLiveSessionBody = zod.object({
-  "action": zod.enum(['start', 'pause', 'resume', 'reset', 'add_time', 'subtract_time', 'next', 'previous', 'restart', 'jump']),
+  "action": zod.enum(['start', 'pause', 'resume', 'reset', 'complete', 'add_time', 'subtract_time', 'next', 'next_session', 'previous', 'restart', 'jump']),
+  "expectedRevision": zod.int().min(controlLiveSessionBodyExpectedRevisionMin),
+  "commandId": zod.string().min(1).max(controlLiveSessionBodyCommandIdMax).describe('Client-generated idempotency key scoped to this event'),
   "amountSeconds": zod.int().min(1).optional(),
   "itemId": zod.string().nullish()
 })
+
+export const controlLiveSessionResponseRevisionMin = 0;
+
+
 
 export const ControlLiveSessionResponse = zod.object({
   "eventId": zod.string(),
@@ -582,7 +610,9 @@ export const ControlLiveSessionResponse = zod.object({
   "activeItemId": zod.string().nullable(),
   "remainingSeconds": zod.int(),
   "elapsedSeconds": zod.int(),
+  "timerAnchorAt": zod.string().describe('Server timestamp at which remainingSeconds and elapsedSeconds were captured'),
   "serverTime": zod.string(),
+  "revision": zod.int().min(controlLiveSessionResponseRevisionMin),
   "startedAt": zod.string().nullish(),
   "pausedAt": zod.string().nullish(),
   "operatorMessage": zod.string().nullable(),
@@ -691,6 +721,10 @@ export const GetPublicDisplayStateParams = zod.object({
   "token": zod.coerce.string()
 })
 
+export const getPublicDisplayStateResponseSessionRevisionMin = 0;
+
+
+
 export const GetPublicDisplayStateResponse = zod.object({
   "event": zod.object({
   "name": zod.string(),
@@ -727,7 +761,9 @@ export const GetPublicDisplayStateResponse = zod.object({
   "activeItemId": zod.string().nullable(),
   "remainingSeconds": zod.int(),
   "elapsedSeconds": zod.int(),
+  "timerAnchorAt": zod.string().describe('Server timestamp at which remainingSeconds and elapsedSeconds were captured'),
   "serverTime": zod.string(),
+  "revision": zod.int().min(getPublicDisplayStateResponseSessionRevisionMin),
   "startedAt": zod.string().nullish(),
   "pausedAt": zod.string().nullish(),
   "operatorMessage": zod.string().nullable(),
@@ -744,5 +780,215 @@ export const RevokeDisplayAccessParams = zod.object({
 })
 
 export const RevokeDisplayAccessResponse = zod.void()
+
+
+/**
+ * @summary Get the authenticated personal workspace
+ */
+export const GetWorkspaceSummaryResponse = zod.object({
+  "id": zod.string(),
+  "name": zod.string(),
+  "role": zod.enum(['OWNER', 'ADMIN', 'OPERATOR', 'VIEWER']),
+  "plan": zod.enum(['STARTER', 'PRO', 'BUSINESS']),
+  "entitlements": zod.object({
+  "activeEvents": zod.int(),
+  "templates": zod.int(),
+  "members": zod.int()
+})
+})
+
+
+/**
+ * @summary List workspace timer templates
+ */
+export const ListTemplatesResponseItem = zod.object({
+  "id": zod.string(),
+  "workspaceId": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "definition": zod.unknown(),
+  "createdByUserId": zod.string(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+export const ListTemplatesResponse = zod.array(ListTemplatesResponseItem)
+
+
+/**
+ * @summary Create a timer template
+ */
+export const createTemplateBodyNameMax = 120;
+
+
+
+export const CreateTemplateBody = zod.object({
+  "name": zod.string().min(1).max(createTemplateBodyNameMax),
+  "description": zod.string().nullish(),
+  "definition": zod.unknown()
+})
+
+export const CreateTemplateResponse = zod.object({
+  "id": zod.string(),
+  "workspaceId": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "definition": zod.unknown(),
+  "createdByUserId": zod.string(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Update a timer template
+ */
+export const UpdateTemplateParams = zod.object({
+  "templateId": zod.coerce.string()
+})
+
+export const updateTemplateBodyNameMax = 120;
+
+
+
+export const UpdateTemplateBody = zod.object({
+  "name": zod.string().min(1).max(updateTemplateBodyNameMax).optional(),
+  "description": zod.string().nullish(),
+  "definition": zod.unknown().optional()
+})
+
+export const UpdateTemplateResponse = zod.object({
+  "id": zod.string(),
+  "workspaceId": zod.string(),
+  "name": zod.string(),
+  "description": zod.string().nullish(),
+  "definition": zod.unknown(),
+  "createdByUserId": zod.string(),
+  "createdAt": zod.string(),
+  "updatedAt": zod.string()
+})
+
+
+/**
+ * @summary Delete a timer template
+ */
+export const DeleteTemplateParams = zod.object({
+  "templateId": zod.coerce.string()
+})
+
+export const DeleteTemplateResponse = zod.void()
+
+
+/**
+ * @summary List workspace members
+ */
+export const ListTeamMembersResponseItem = zod.object({
+  "id": zod.string(),
+  "userId": zod.string(),
+  "role": zod.enum(['OWNER', 'ADMIN', 'OPERATOR', 'VIEWER']),
+  "createdAt": zod.string(),
+  "displayName": zod.string().nullish(),
+  "email": zod.string().nullish()
+})
+export const ListTeamMembersResponse = zod.array(ListTeamMembersResponseItem)
+
+
+/**
+ * @summary Change a member role
+ */
+export const UpdateTeamMemberRoleParams = zod.object({
+  "memberId": zod.coerce.string()
+})
+
+export const UpdateTeamMemberRoleBody = zod.object({
+  "role": zod.enum(['ADMIN', 'OPERATOR', 'VIEWER'])
+})
+
+export const UpdateTeamMemberRoleResponse = zod.object({
+  "id": zod.string(),
+  "userId": zod.string(),
+  "role": zod.enum(['OWNER', 'ADMIN', 'OPERATOR', 'VIEWER']),
+  "createdAt": zod.string(),
+  "displayName": zod.string().nullish(),
+  "email": zod.string().nullish()
+})
+
+
+/**
+ * @summary List workspace invitations
+ */
+export const ListInvitationsResponseItem = zod.object({
+  "id": zod.string(),
+  "email": zod.string(),
+  "role": zod.enum(['ADMIN', 'OPERATOR', 'VIEWER']),
+  "expiresAt": zod.string(),
+  "revokedAt": zod.string().nullish(),
+  "acceptedAt": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+export const ListInvitationsResponse = zod.array(ListInvitationsResponseItem)
+
+
+/**
+ * @summary Create a workspace invitation
+ */
+export const createInvitationBodyExpiresInDaysMax = 30;
+
+
+
+export const CreateInvitationBody = zod.object({
+  "email": zod.email(),
+  "role": zod.enum(['ADMIN', 'OPERATOR', 'VIEWER']),
+  "expiresInDays": zod.int().min(1).max(createInvitationBodyExpiresInDaysMax).optional()
+})
+
+export const CreateInvitationResponse = zod.object({
+  "id": zod.string(),
+  "email": zod.string(),
+  "role": zod.enum(['ADMIN', 'OPERATOR', 'VIEWER']),
+  "expiresAt": zod.string(),
+  "revokedAt": zod.string().nullish(),
+  "acceptedAt": zod.string().nullish(),
+  "createdAt": zod.string()
+})
+
+
+/**
+ * @summary Revoke a workspace invitation
+ */
+export const RevokeInvitationParams = zod.object({
+  "invitationId": zod.coerce.string()
+})
+
+export const RevokeInvitationResponse = zod.void()
+
+
+/**
+ * @summary List workspace audit activity
+ */
+export const ListAuditLogsResponseItem = zod.object({
+  "id": zod.string(),
+  "action": zod.string(),
+  "entityType": zod.string(),
+  "entityId": zod.string().nullish(),
+  "actorUserId": zod.string().nullish(),
+  "createdAt": zod.string(),
+  "metadata": zod.unknown().optional()
+})
+export const ListAuditLogsResponse = zod.array(ListAuditLogsResponseItem)
+
+
+/**
+ * @summary Get persisted billing state and entitlements
+ */
+export const GetBillingEntitlementResponse = zod.object({
+  "plan": zod.enum(['STARTER', 'PRO', 'BUSINESS']),
+  "status": zod.string(),
+  "entitlements": zod.object({
+  "activeEvents": zod.int(),
+  "templates": zod.int(),
+  "members": zod.int()
+}),
+  "upgradesAvailable": zod.boolean()
+})
 
 
