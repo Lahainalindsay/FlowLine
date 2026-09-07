@@ -9,6 +9,7 @@ import {
   useGetLiveSession, getGetLiveSessionQueryKey,
   PublicDisplayState, EventDetail
 } from '@workspace/api-client-react';
+import QRCode from 'react-qr-code';
 import { formatTimer, cn, projectSessionTiming } from '../lib/utils';
 import { Loader2, TriangleAlert, Monitor, ArrowRight } from 'lucide-react';
 import { StageTimeButton, StageTimeInput } from '../components/stagetime';
@@ -155,7 +156,9 @@ function TokenDisplayHost({ token, displayId }: { token: string; displayId?: str
     />;
   }
 
-  return <DisplayUI state={q.data} streamState={streamState} />;
+  const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
+  const guestUrl = `${window.location.origin}${basePath}/display/${displayId}?token=${token}`;
+  return <DisplayUI state={q.data} streamState={streamState} guestUrl={guestUrl} />;
 }
 
 function PreviewDisplayHost({ eventId, displayId }: { eventId: string; displayId: string }) {
@@ -199,7 +202,7 @@ function ErrorView({ onRetry, onPair }: { onRetry?: () => void; onPair?: () => v
   );
 }
 
-function DisplayUI({ state, streamState }: { state: PublicDisplayState, streamState?: string }) {
+function DisplayUI({ state, streamState, guestUrl }: { state: PublicDisplayState, streamState?: string, guestUrl?: string }) {
   const [timing, setTiming] = useState(() => projectSessionTiming(state.session));
 
   useEffect(() => {
@@ -217,12 +220,43 @@ function DisplayUI({ state, streamState }: { state: PublicDisplayState, streamSt
   const layout = `${state.display?.kind ?? ''} ${state.display?.assignedLayout ?? ''}`.toLowerCase();
   const speakerLayout = layout.includes('speaker');
   const backstageLayout = layout.includes('backstage');
+  const creatorLayout = layout.includes('creator');
+  const guestLayout = layout.includes('guest');
+
+  if (creatorLayout) {
+    return (
+      <div className={cn('stagetime-noise relative flex min-h-[100dvh] overflow-hidden bg-transparent p-5 md:p-10', overtime && 'bg-red-950/20')} data-testid="display-creator-layout">
+        {streamState && streamState !== 'CONNECTED' && (
+          <div className="absolute left-4 top-4 rounded bg-red-950/70 px-2 py-1 font-mono text-[10px] tracking-widest text-[var(--color-stagetime-red)]">{streamState}</div>
+        )}
+        <div className="mt-auto flex w-full items-end justify-between gap-5 rounded-2xl border border-white/15 bg-[#07111d]/90 p-5 shadow-2xl backdrop-blur-xl md:p-8">
+          <div className="min-w-0">
+            <div className="text-xs font-bold uppercase tracking-[0.24em] text-[var(--color-stagetime-cyan)]">{state.display.currentContent || state.event.name}</div>
+            <div className="mt-2 truncate text-2xl font-bold text-white display-font md:text-4xl">{active?.title || 'Ready'}</div>
+            {active?.speaker && <div className="mt-1 text-sm text-white/60 md:text-lg">{active.speaker}</div>}
+          </div>
+          <div className="shrink-0 text-right">
+            <div className={cn('timer-text text-[clamp(3.5rem,10vw,9rem)] leading-none', overtime ? 'text-[var(--color-stagetime-red)]' : 'text-white')}>
+              {formatTimer(timing.remainingSeconds)}
+            </div>
+            <div className="mt-1 font-mono text-xs uppercase tracking-[0.2em] text-white/45">Elapsed {formatTimer(timing.elapsedSeconds)}</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className={cn('stagetime-noise flex min-h-[100dvh] flex-col justify-center px-10 py-10 transition-colors duration-1000 overflow-hidden relative', overtime ? 'bg-[#2a0f0d]' : 'bg-[var(--color-stagetime-bg)]')}>
       {streamState && streamState !== 'CONNECTED' && (
         <div className="absolute top-4 left-4 z-50 text-[10px] font-mono tracking-widest text-[var(--color-stagetime-red)] bg-red-950/50 px-2 py-1 rounded">
           {streamState}
+        </div>
+      )}
+      {guestLayout && guestUrl && (
+        <div className="absolute right-6 top-6 z-40 rounded-2xl border border-white/15 bg-white p-4 text-center shadow-2xl md:right-10 md:top-10" data-testid="qr-public-display">
+          <QRCode value={guestUrl} size={148} level="M" aria-label="QR code to watch this timer on a phone" />
+          <div className="mt-3 text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-800">Scan to watch live</div>
         </div>
       )}
       {/* Background gradients */}
@@ -238,6 +272,11 @@ function DisplayUI({ state, streamState }: { state: PublicDisplayState, streamSt
         <div className="text-2xl md:text-3xl font-bold uppercase tracking-[0.3em] text-[var(--color-stagetime-text-dim)] mb-8 display-font">
           {state.display?.name || 'MAIN STAGE'} <span className="mx-4 opacity-30">•</span> {active?.title || 'READY'}
         </div>
+        {state.display?.currentContent && (
+          <div className="mb-8 text-xl font-semibold tracking-wide text-white/75 md:text-3xl" data-testid="text-display-content">
+            {state.display.currentContent}
+          </div>
+        )}
 
         <div className={cn(
           'timer-text text-[clamp(8rem,25vw,30rem)] leading-[0.8] drop-shadow-2xl transition-colors duration-500',

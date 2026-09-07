@@ -333,6 +333,28 @@ export interface DisplayInput {
   assignedLayout?: string;
 }
 
+export type DisplayUpdateAssignedLayout = typeof DisplayUpdateAssignedLayout[keyof typeof DisplayUpdateAssignedLayout];
+
+
+export const DisplayUpdateAssignedLayout = {
+  focus: 'focus',
+  speaker: 'speaker',
+  backstage: 'backstage',
+  creator: 'creator',
+  guest: 'guest',
+} as const;
+
+export interface DisplayUpdate {
+  /**
+     * @minLength 1
+     * @maxLength 80
+     */
+  name?: string;
+  assignedLayout?: DisplayUpdateAssignedLayout;
+  /** @maxLength 160 */
+  currentContent?: string;
+}
+
 export interface DisplayAccessInput {
   displayId: string;
   /**

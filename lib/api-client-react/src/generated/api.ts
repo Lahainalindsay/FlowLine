@@ -40,6 +40,7 @@ import type {
   DisplayCodeInput,
   DisplayInput,
   DisplayToken,
+  DisplayUpdate,
   ErrorResponse,
   Event,
   EventDetail,
@@ -1272,6 +1273,78 @@ export const useCreateDisplay = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getCreateDisplayMutationOptions(options));
+    }
+
+export const getUpdateDisplayUrl = (displayId: string,) => {
+
+
+
+
+  return `/api/displays/${displayId}`
+}
+
+/**
+ * @summary Update a display's name, layout, and public content
+ */
+export const updateDisplay = async (displayId: string,
+    displayUpdate: DisplayUpdate, options?: Parameters<typeof customFetch>[1]): Promise<Display> => {
+
+  return customFetch<Display>(getUpdateDisplayUrl(displayId),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(displayUpdate)
+  }
+);}
+
+
+
+
+
+export const getUpdateDisplayMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDisplay>>, TError,{displayId: string;data: BodyType<DisplayUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateDisplay>>, TError,{displayId: string;data: BodyType<DisplayUpdate>}, TContext> => {
+
+const mutationKey = ['updateDisplay'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateDisplay>>, {displayId: string;data: BodyType<DisplayUpdate>}> = (props) => {
+          const {displayId,data} = props ?? {};
+
+          return  updateDisplay(displayId,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateDisplayMutationResult = NonNullable<Awaited<ReturnType<typeof updateDisplay>>>
+    export type UpdateDisplayMutationBody = BodyType<DisplayUpdate>
+    export type UpdateDisplayMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update a display's name, layout, and public content
+ */
+export const useUpdateDisplay = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateDisplay>>, TError,{displayId: string;data: BodyType<DisplayUpdate>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateDisplay>>,
+        TError,
+        {displayId: string;data: BodyType<DisplayUpdate>},
+        TContext
+      > => {
+      return useMutation(getUpdateDisplayMutationOptions(options));
     }
 
 export const getDeleteDisplayUrl = (displayId: string,) => {
@@ -3031,3 +3104,4 @@ export const useCreateBillingPortal = <TError = ErrorType<unknown>,
       > => {
       return useMutation(getCreateBillingPortalMutationOptions(options));
     }
+

@@ -34,6 +34,8 @@ import {
   TriggerCueParams,
   UpdateAgendaItemBody,
   UpdateAgendaItemParams,
+  UpdateDisplayBody,
+  UpdateDisplayParams,
   UpdateEventBody,
   CreateInvitationBody,
   CreateInvitationResponse,
@@ -770,6 +772,27 @@ router.post("/events/:eventId/displays", async (req, res) => {
     .returning();
   void publishRealtime(params.eventId, "display");
   res.status(201).json(displayPayload(display));
+});
+
+router.patch("/displays/:displayId", async (req, res) => {
+  const params = UpdateDisplayParams.parse(req.params);
+  const body = UpdateDisplayBody.parse(req.body);
+  const values = {
+    ...(body.name !== undefined ? { name: body.name.trim() } : {}),
+    ...(body.assignedLayout !== undefined ? { assignedLayout: body.assignedLayout } : {}),
+    ...(body.currentContent !== undefined ? { currentContent: body.currentContent.trim() } : {}),
+  };
+  const [display] = await db
+    .update(displaysTable)
+    .set(values)
+    .where(eq(displaysTable.id, params.displayId))
+    .returning();
+  if (!display) {
+    res.status(404).json({ error: "Display not found" });
+    return;
+  }
+  void publishRealtime(display.eventId, "display");
+  res.json(displayPayload(display));
 });
 
 router.delete("/displays/:displayId", async (req, res) => {

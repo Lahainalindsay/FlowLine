@@ -40,6 +40,8 @@ export * from './displayInput';
 export * from './displayInputKind';
 export * from './displayKind';
 export * from './displayToken';
+export * from './displayUpdate';
+export * from './displayUpdateAssignedLayout';
 export * from './entitlements';
 export * from './errorResponse';
 export * from './event';

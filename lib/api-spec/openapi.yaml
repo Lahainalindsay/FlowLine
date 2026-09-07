@@ -277,6 +277,23 @@ paths:
   /displays/{displayId}:
     parameters:
       - $ref: "#/components/parameters/DisplayId"
+    patch:
+      operationId: updateDisplay
+      tags: [live]
+      summary: Update a display's name, layout, and public content
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DisplayUpdate"
+      responses:
+        "200":
+          description: Updated display
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Display"
     delete:
       operationId: deleteDisplay
       tags: [live]
@@ -751,6 +768,12 @@ components:
         name: { type: string, minLength: 1 }
         kind: { type: string, enum: [speaker, stage, audience, backstage] }
         assignedLayout: { type: string }
+    DisplayUpdate:
+      type: object
+      properties:
+        name: { type: string, minLength: 1, maxLength: 80 }
+        assignedLayout: { type: string, enum: [focus, speaker, backstage, creator, guest] }
+        currentContent: { type: string, maxLength: 160 }
     DisplayAccessInput:
       type: object
       required: [displayId]

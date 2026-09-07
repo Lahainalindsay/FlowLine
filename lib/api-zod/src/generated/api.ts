@@ -544,6 +544,37 @@ export const CreateDisplayResponse = zod.object({
 
 
 /**
+ * @summary Update a display's name, layout, and public content
+ */
+export const UpdateDisplayParams = zod.object({
+  "displayId": zod.coerce.string()
+})
+
+export const updateDisplayBodyNameMax = 80;
+
+export const updateDisplayBodyCurrentContentMax = 160;
+
+
+
+export const UpdateDisplayBody = zod.object({
+  "name": zod.string().min(1).max(updateDisplayBodyNameMax).optional(),
+  "assignedLayout": zod.enum(['focus', 'speaker', 'backstage', 'creator', 'guest']).optional(),
+  "currentContent": zod.string().max(updateDisplayBodyCurrentContentMax).optional()
+})
+
+export const UpdateDisplayResponse = zod.object({
+  "id": zod.string(),
+  "eventId": zod.string(),
+  "name": zod.string(),
+  "kind": zod.enum(['speaker', 'stage', 'audience', 'backstage']),
+  "connectionStatus": zod.enum(['online', 'offline', 'pairing']),
+  "assignedLayout": zod.string(),
+  "lastSeenAt": zod.string().nullish(),
+  "currentContent": zod.string()
+})
+
+
+/**
  * @summary Remove a display
  */
 export const DeleteDisplayParams = zod.object({

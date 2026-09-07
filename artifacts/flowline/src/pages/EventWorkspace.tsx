@@ -8,10 +8,11 @@ import {
   useGetLiveSession, getGetLiveSessionQueryKey,
   useControlLiveSession, useSendOperatorMessage, useTriggerCue,
   useCreateAgendaItem, useUpdateAgendaItem, useDeleteAgendaItem, useReorderAgendaItems,
-  useCreateDisplayAccess,
-  EventDetail, AgendaItem, LiveSession,
+  useCreateDisplayAccess, useUpdateDisplay,
+  EventDetail, AgendaItem, LiveSession, Display,
   getGetDashboardSummaryQueryKey
 } from '@workspace/api-client-react';
+import QRCode from 'react-qr-code';
 import { StageTimeLayout, StageTimeButton, StageTimeCard, StageTimeBadge, StageTimeInput, StageTimeLabel, StageTimeSelect, StageTimeModal, ConfirmDialog, TimerDisplay, TimerControls } from '../components/stagetime';
 import { formatTimer, fmtDate, fmtTime, cn, projectSessionTiming } from '../lib/utils';
 import {
@@ -52,11 +53,13 @@ export default function EventWorkspace() {
     });
   };
 
+  const publicDisplayUrl = shareData && sharedDisplayId
+    ? `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, '')}/display/${sharedDisplayId}?token=${shareData.token}`
+    : '';
+
   const copyToClipboard = () => {
     if (!shareData) return;
-    const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
-    const url = `${window.location.origin}${basePath}/display/${sharedDisplayId}?token=${shareData.token}`;
-    navigator.clipboard.writeText(url).then(() => {
+    navigator.clipboard.writeText(publicDisplayUrl).then(() => {
       setIsCopied(true);
       setTimeout(() => setIsCopied(false), 2000);
     });
@@ -197,10 +200,16 @@ export default function EventWorkspace() {
           </div>
         ) : shareData ? (
           <div className="space-y-6">
-            <div className="bg-[rgba(0,0,0,0.3)] rounded-xl border border-[var(--color-stagetime-border)] p-6 text-center shadow-inner">
-              <div className="text-xs font-bold text-[var(--color-stagetime-text-dim)] uppercase tracking-widest mb-3">Pairing Code</div>
-              <div className="text-5xl font-bold tracking-[0.2em] text-white display-font">{shareData.code}</div>
-              <div className="text-[10px] text-[var(--color-stagetime-text-dim)] mt-3">For {sharedDisplay?.name ?? 'selected display'} • Expires {fmtDate(shareData.expiresAt)} at {fmtTime(shareData.expiresAt)}</div>
+            <div className="grid gap-5 sm:grid-cols-[1fr_auto] bg-[rgba(0,0,0,0.3)] rounded-xl border border-[var(--color-stagetime-border)] p-6 shadow-inner">
+              <div className="text-center sm:text-left sm:self-center">
+                <div className="text-xs font-bold text-[var(--color-stagetime-text-dim)] uppercase tracking-widest mb-3">Pairing Code</div>
+                <div className="text-5xl font-bold tracking-[0.2em] text-white display-font" data-testid="text-display-pairing-code">{shareData.code}</div>
+                <div className="text-[10px] text-[var(--color-stagetime-text-dim)] mt-3">For {sharedDisplay?.name ?? 'selected display'} • Expires {fmtDate(shareData.expiresAt)} at {fmtTime(shareData.expiresAt)}</div>
+              </div>
+              <div className="mx-auto rounded-xl bg-white p-3 text-center" data-testid="qr-guest-display">
+                <QRCode value={publicDisplayUrl} size={132} level="M" aria-label="QR code for guest timer link" />
+                <div className="mt-2 text-[9px] font-bold uppercase tracking-wider text-slate-700">Scan to watch</div>
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -208,7 +217,7 @@ export default function EventWorkspace() {
               <div className="flex gap-2">
                 <StageTimeInput
                   readOnly
-                  value={`${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, '')}/display/${sharedDisplayId}?token=${shareData.token}`}
+                  value={publicDisplayUrl}
                   className="font-mono text-xs text-[var(--color-stagetime-text-dim)] flex-1 truncate"
                 />
                 <StageTimeButton variant="outline" onClick={copyToClipboard} className="shrink-0 w-28">
@@ -221,7 +230,7 @@ export default function EventWorkspace() {
             <StageTimeButton
               variant="primary"
               className="w-full h-12 mt-4"
-              onClick={() => window.open(`${import.meta.env.BASE_URL.replace(/\/$/, '')}/display/${sharedDisplayId}?token=${shareData.token}`, '_blank')}
+              onClick={() => window.open(publicDisplayUrl, '_blank')}
             >
               <LinkIcon className="h-4 w-4 mr-2" /> Open in New Tab
             </StageTimeButton>
@@ -237,12 +246,47 @@ function LiveControl({ event, items, session, displays, streamState, canControl 
   const control = useControlLiveSession();
   const sendMsg = useSendOperatorMessage();
   const triggerCue = useTriggerCue();
+  const updateDisplay = useUpdateDisplay();
 
   const [message, setMessage] = useState('');
   const [cueLabel, setCueLabel] = useState('');
   const [isConfirmingReset, setIsConfirmingReset] = useState(false);
   const [messageFeedback, setMessageFeedback] = useState('');
   const [cueFeedback, setCueFeedback] = useState('');
+  const [editingDisplay, setEditingDisplay] = useState<Display | null>(null);
+  const [displayDraft, setDisplayDraft] = useState({ name: '', assignedLayout: 'focus', currentContent: '' });
+  const [displayError, setDisplayError] = useState('');
+
+  const openDisplayEditor = (display: Display) => {
+    setEditingDisplay(display);
+    setDisplayDraft({
+      name: display.name,
+      assignedLayout: display.assignedLayout || 'focus',
+      currentContent: display.currentContent || '',
+    });
+    setDisplayError('');
+  };
+
+  const saveDisplay = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingDisplay || !displayDraft.name.trim()) return;
+    setDisplayError('');
+    updateDisplay.mutate(
+      { displayId: editingDisplay.id, data: {
+        name: displayDraft.name.trim(),
+        assignedLayout: displayDraft.assignedLayout as 'focus' | 'speaker' | 'backstage' | 'creator' | 'guest',
+        currentContent: displayDraft.currentContent.trim(),
+      } },
+      {
+        onSuccess: () => {
+          queryClient.invalidateQueries({ queryKey: getListDisplaysQueryKey(event.id) });
+          queryClient.invalidateQueries({ queryKey: getGetEventQueryKey(event.id) });
+          setEditingDisplay(null);
+        },
+        onError: () => setDisplayError('Could not save display settings. Try again.'),
+      },
+    );
+  };
 
   const active = items.find(i => i.id === session.activeItemId) ?? items.find(i => i.status === 'active');
   const nextItem = active ? items[items.indexOf(active) + 1] : items[0];
@@ -493,14 +537,50 @@ function LiveControl({ event, items, session, displays, streamState, canControl 
                   <div>
                     <div className="text-sm font-bold text-white">{d.name}</div>
                     <div className="text-[10px] text-[var(--color-stagetime-text-dim)] mt-1 uppercase tracking-widest font-semibold">{d.assignedLayout}</div>
+                    {d.currentContent && <div className="mt-1 max-w-48 truncate text-xs text-[var(--color-stagetime-text-dim)]">{d.currentContent}</div>}
                   </div>
-                  <StageTimeBadge variant={d.connectionStatus === 'online' ? 'good' : 'warn'}>{d.connectionStatus}</StageTimeBadge>
+                  <div className="flex items-center gap-2">
+                    <StageTimeBadge variant={d.connectionStatus === 'online' ? 'good' : 'warn'}>{d.connectionStatus}</StageTimeBadge>
+                    {canControl && (
+                      <StageTimeButton variant="ghost" size="sm" onClick={() => openDisplayEditor(d)} aria-label={`Edit ${d.name}`} data-testid={`button-edit-display-${d.id}`}>
+                        <Edit2 className="h-4 w-4" />
+                      </StageTimeButton>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
           )}
         </StageTimeCard>
       </div>
+      <StageTimeModal isOpen={!!editingDisplay} onClose={() => setEditingDisplay(null)} title="Edit Display">
+        <form onSubmit={saveDisplay} className="space-y-5">
+          <div>
+            <StageTimeLabel>Display name</StageTimeLabel>
+            <StageTimeInput id="display-name" value={displayDraft.name} maxLength={80} onChange={e => setDisplayDraft(current => ({ ...current, name: e.target.value }))} data-testid="input-display-name" />
+          </div>
+          <div>
+            <StageTimeLabel>Display template</StageTimeLabel>
+            <StageTimeSelect id="display-layout" value={displayDraft.assignedLayout} onChange={e => setDisplayDraft(current => ({ ...current, assignedLayout: e.target.value }))} data-testid="select-display-layout">
+              <option value="focus">Main timer</option>
+              <option value="speaker">Speaker confidence monitor</option>
+              <option value="backstage">Backstage rundown</option>
+              <option value="creator">Creator overlay — workouts & video</option>
+              <option value="guest">Guest QR screen — scan to watch on a phone</option>
+            </StageTimeSelect>
+            <p className="mt-2 text-xs text-[var(--color-stagetime-text-dim)]">Creator overlay uses a clean lower-third timer designed to sit over recorded or streamed video.</p>
+          </div>
+          <div>
+            <StageTimeLabel>Custom display text</StageTimeLabel>
+            <StageTimeInput id="display-content" value={displayDraft.currentContent} maxLength={160} placeholder="e.g. 30-minute HIIT • Round 2" onChange={e => setDisplayDraft(current => ({ ...current, currentContent: e.target.value }))} data-testid="input-display-content" />
+          </div>
+          {displayError && <p role="alert" className="text-sm text-[var(--color-stagetime-red)]">{displayError}</p>}
+          <div className="flex justify-end gap-3">
+            <StageTimeButton type="button" variant="ghost" onClick={() => setEditingDisplay(null)}>Cancel</StageTimeButton>
+            <StageTimeButton type="submit" variant="primary" loading={updateDisplay.isPending} disabled={!displayDraft.name.trim()}>Save display</StageTimeButton>
+          </div>
+        </form>
+      </StageTimeModal>
     </div>
   );
 }
