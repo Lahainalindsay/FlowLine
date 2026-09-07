@@ -1,6 +1,6 @@
 import { Router, type IRouter, type RequestHandler } from "express";
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
-import { getAuth } from "@clerk/express";
+import { clerkClient, getAuth } from "@clerk/express";
 import {
   ApplyAgendaImportBody,
   ApplyAgendaImportParams,
@@ -37,6 +37,8 @@ import {
   UpdateEventBody,
   CreateInvitationBody,
   CreateInvitationResponse,
+  AcceptInvitationBody,
+  AcceptInvitationResponse,
   CreateTemplateBody,
   CreateTemplateResponse,
   DeleteTemplateParams,
@@ -70,12 +72,16 @@ import {
   workspaceInvitationsTable,
   workspacesTable,
 } from "@workspace/db";
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { ensurePersonalWorkspace, getWorkspaceMembership, getWorkspacePlan, mayCreate, PLAN_ENTITLEMENTS, roleCan, type Permission } from "../lib/workspace";
 import { beginSse, publishSnapshots, sendSnapshot, subscribeOperator, subscribePublic } from "../lib/realtime";
 import { createSessionTransition, projectSession } from "../lib/timer";
 import { billingEntitlementFlags, decideCheckoutAttempt, hasManagedStripeSubscription, isPaidPlan, safeReturnUrl, selectOfficialPlanPrice, type PaidPlan } from "../lib/billing";
 import { stripeProxy } from "../lib/stripeClient";
+import { DisplayCodeRateLimiter } from "../lib/display-code-rate-limit";
+import { canAcceptInvitation, hashInvitationToken } from "../lib/invitation";
+import { visibleOperatorMessage } from "../lib/operator-message";
+import { calculateBehindScheduleMinutes, calculateProjectedFinish } from "../lib/event-schedule";
 
 const router: IRouter = Router();
 
@@ -87,6 +93,32 @@ const accessSecret = process.env.SESSION_SECRET ?? (() => {
 
 const codeHash = (code: string) =>
   createHash("sha256").update(code.toUpperCase().replace(/\s/g, "")).digest("hex");
+const displayCodeRateLimiter = new DisplayCodeRateLimiter();
+
+function normalizedAuthenticatedEmail(req: Parameters<RequestHandler>[0]) {
+  const claims = getAuth(req)?.sessionClaims as Record<string, unknown> | undefined;
+  const email = claims?.email ?? claims?.email_address ?? claims?.primary_email_address;
+  return typeof email === "string" && email.trim() ? email.trim().toLowerCase() : null;
+}
+
+async function resolveAuthenticatedEmail(req: Parameters<RequestHandler>[0], userId: string) {
+  const claimed = normalizedAuthenticatedEmail(req);
+  if (claimed) return claimed;
+  const [appUser] = await db.select({ email: appUsersTable.email }).from(appUsersTable)
+    .where(eq(appUsersTable.clerkUserId, userId)).limit(1);
+  if (appUser?.email?.trim()) return appUser.email.trim().toLowerCase();
+  try {
+    const clerkUser = await clerkClient.users.getUser(userId);
+    const primary = clerkUser.emailAddresses.find((item) => item.id === clerkUser.primaryEmailAddressId)
+      ?? clerkUser.emailAddresses[0];
+    const email = primary?.emailAddress?.trim().toLowerCase();
+    if (!email) return null;
+    await db.update(appUsersTable).set({ email }).where(eq(appUsersTable.clerkUserId, userId));
+    return email;
+  } catch {
+    return null;
+  }
+}
 
 function createAccessToken(accessId: string, expiresAt: Date) {
   const payload = `${accessId}.${Math.floor(expiresAt.getTime() / 1000)}`;
@@ -155,7 +187,7 @@ async function ensureSession(eventId: string, firstItemId?: string) {
   return concurrent;
 }
 
-function sessionPayload(session: typeof liveSessionsTable.$inferSelect, at = new Date()) {
+function sessionPayload(session: typeof liveSessionsTable.$inferSelect, at = new Date(), display?: typeof displaysTable.$inferSelect) {
   const projection = projectSession(session, at);
   return {
     eventId: session.eventId,
@@ -171,7 +203,13 @@ function sessionPayload(session: typeof liveSessionsTable.$inferSelect, at = new
     revision: session.revision,
     startedAt: iso(session.startedAt),
     pausedAt: iso(session.pausedAt),
-    operatorMessage: session.operatorMessage,
+    operatorMessage: visibleOperatorMessage(
+      session.operatorMessage,
+      session.operatorMessageTarget,
+      session.operatorMessageExpiresAt,
+      display,
+      at,
+    ),
     activeCue: session.activeCue,
   };
 }
@@ -182,22 +220,13 @@ async function eventPayload(event: typeof eventsTable.$inferSelect) {
     (sum, item) => sum + item.plannedDurationMinutes,
     0,
   );
-  const [active] = await db
-    .select()
-    .from(agendaItemsTable)
-    .where(
-      and(
-        eq(agendaItemsTable.eventId, event.id),
-        eq(agendaItemsTable.status, "active"),
-      ),
-    )
-    .limit(1);
   const [session] = await db
     .select()
     .from(liveSessionsTable)
     .where(eq(liveSessionsTable.eventId, event.id))
     .limit(1);
 
+  const currentSession = session ?? await ensureSession(event.id, agenda[0]?.id);
   return {
     id: event.id,
     name: event.name,
@@ -207,11 +236,11 @@ async function eventPayload(event: typeof eventsTable.$inferSelect) {
     status: event.status,
     segmentCount: agenda.length,
     totalPlannedMinutes,
-    behindScheduleMinutes: active ? Math.max(0, active.position - 1) : 0,
-    projectedFinish: null,
+    behindScheduleMinutes: calculateBehindScheduleMinutes(event.date, event.timezone, currentSession, agenda),
+    projectedFinish: calculateProjectedFinish(currentSession, agenda),
     createdAt: event.createdAt.toISOString(),
     updatedAt: event.updatedAt.toISOString(),
-    session: session ? sessionPayload(session) : sessionPayload(await ensureSession(event.id, agenda[0]?.id)),
+    session: sessionPayload(currentSession),
   };
 }
 
@@ -241,7 +270,7 @@ async function publicDisplaySnapshot(accessId: string, eventType: string) {
     ensureSession(access.eventId),
   ]);
   if (!event || !display) return null;
-  const rawSession = sessionPayload(session);
+  const rawSession = sessionPayload(session, new Date(), display);
   // Do not expose internal cue state or agenda notes to an untrusted surface.
   const { activeCue: _activeCue, ...sessionPayloadPublic } = rawSession;
   return {
@@ -288,6 +317,12 @@ async function publishRealtime(eventId: string, eventType: string, bumpRevision 
 }
 
 router.post("/display-access/resolve", async (req, res) => {
+  const rateLimit = displayCodeRateLimiter.consume(req.ip ?? "unknown");
+  if (!rateLimit.allowed) {
+    res.set("Retry-After", String(rateLimit.retryAfterSeconds));
+    res.status(429).json({ error: "Too many display code attempts. Please try again shortly." });
+    return;
+  }
   const body = ResolveDisplayCodeBody.parse(req.body);
   const [access] = await db
     .select()
@@ -318,26 +353,17 @@ router.get("/display-access/:token", async (req, res) => {
     res.status(401).json({ error: "Display access expired" });
     return;
   }
-  const [[event], [display], agenda, session] = await Promise.all([
-    db.select().from(eventsTable).where(eq(eventsTable.id, access.eventId)).limit(1),
-    db.select().from(displaysTable).where(and(eq(displaysTable.id, access.displayId), eq(displaysTable.eventId, access.eventId))).limit(1),
-    getAgenda(access.eventId),
-    ensureSession(access.eventId),
+  await Promise.all([
+    db.update(displayAccessTable).set({ lastSeenAt: new Date() }).where(eq(displayAccessTable.id, access.id)),
+    db.update(displaysTable).set({ lastSeenAt: new Date(), connectionStatus: "online" })
+      .where(and(eq(displaysTable.id, access.displayId), eq(displaysTable.eventId, access.eventId))),
   ]);
-  if (!event || !display) {
+  const snapshot = await publicDisplaySnapshot(access.id, "snapshot");
+  if (!snapshot) {
     res.status(404).json({ error: "Display not found" });
     return;
   }
-  await Promise.all([
-    db.update(displayAccessTable).set({ lastSeenAt: new Date() }).where(eq(displayAccessTable.id, access.id)),
-    db.update(displaysTable).set({ lastSeenAt: new Date(), connectionStatus: "online" }).where(eq(displaysTable.id, display.id)),
-  ]);
-  res.json({
-    event: { name: event.name, timezone: event.timezone },
-    display: displayPayload({ ...display, lastSeenAt: new Date(), connectionStatus: "online" }),
-    agenda: agenda.map(agendaPayload),
-    session: sessionPayload(session),
-  });
+  res.json(snapshot.state);
 });
 
 router.get("/display-access/:token/stream", async (req, res): Promise<void> => {
@@ -366,6 +392,10 @@ router.use(requireAuth);
 router.use(async (req, res, next) => {
   try {
     res.locals.personalWorkspaceId = await ensurePersonalWorkspace(res.locals.userId);
+    const email = normalizedAuthenticatedEmail(req);
+    if (email) {
+      await db.update(appUsersTable).set({ email }).where(eq(appUsersTable.clerkUserId, res.locals.userId));
+    }
     next();
   } catch (error) {
     req.log.error({ error, userId: res.locals.userId }, "Failed to provision personal workspace");
@@ -487,29 +517,32 @@ router.post("/events", async (req, res) => {
       res.status(403).json({ error: `${entitlement.plan} allows up to ${entitlement.limit} active events. Complete or delete an event to create another.` });
       return;
     }
-    const [event] = await db
-      .insert(eventsTable)
-      .values({
-        id: eventId,
-        ownerUserId: res.locals.userId,
-        workspaceId,
-        name: body.name,
-        date: body.date,
-        venue: body.venue ?? null,
-        timezone: body.timezone,
-        status: "draft",
-      })
-      .returning();
-    await ensureSession(event.id);
-    await db.insert(displaysTable).values({
-      id: id(),
-      eventId: event.id,
-      name: "Speaker confidence monitor",
-      kind: "speaker",
-      connectionStatus: "online",
-      assignedLayout: "focus",
-      lastSeenAt: new Date(),
-      currentContent: "Ready to receive live timing",
+    const event = await db.transaction(async (tx) => {
+      const [created] = await tx
+        .insert(eventsTable)
+        .values({
+          id: eventId,
+          ownerUserId: res.locals.userId,
+          workspaceId,
+          name: body.name,
+          date: body.date,
+          venue: body.venue ?? null,
+          timezone: body.timezone,
+          status: "draft",
+        })
+        .returning();
+      await tx.insert(liveSessionsTable).values({ eventId: created.id });
+      await tx.insert(displaysTable).values({
+        id: id(),
+        eventId: created.id,
+        name: "Speaker confidence monitor",
+        kind: "speaker",
+        connectionStatus: "online",
+        assignedLayout: "focus",
+        lastSeenAt: new Date(),
+        currentContent: "Ready to receive live timing",
+      });
+      return created;
     });
     res.status(201).json(await eventPayload(event));
   } catch (error) {
@@ -521,14 +554,17 @@ router.post("/events", async (req, res) => {
 router.get("/events/:eventId", async (req, res) => {
   const params = GetEventParams.parse(req.params);
   const [event] = await db.select().from(eventsTable).where(eq(eventsTable.id, params.eventId)).limit(1);
-  if (!event) return res.status(404).json({ error: "Event not found" });
-  const [agenda, displays, session] = await Promise.all([
+  if (!event?.workspaceId) return res.status(404).json({ error: "Event not found" });
+  const [agenda, displays, session, membership] = await Promise.all([
     getAgenda(event.id),
     db.select().from(displaysTable).where(eq(displaysTable.eventId, event.id)),
     ensureSession(event.id),
+    getWorkspaceMembership(event.workspaceId, res.locals.userId),
   ]);
+  if (!membership) return res.status(404).json({ error: "Event not found" });
   return res.json({
     ...(await eventPayload(event)),
+    accessRole: membership.role,
     agenda: agenda.map(agendaPayload),
     displays: displays.map(displayPayload),
     session: sessionPayload(session),
@@ -552,11 +588,14 @@ router.delete("/events/:eventId", async (req, res) => {
   const params = DeleteEventParams.parse(req.params);
   const [event] = await db.select().from(eventsTable).where(eq(eventsTable.id, params.eventId)).limit(1);
   if (!event) return res.status(404).json({ error: "Event not found" });
-  await db.delete(agendaItemsTable).where(eq(agendaItemsTable.eventId, params.eventId));
-  await db.delete(displaysTable).where(eq(displaysTable.eventId, params.eventId));
-  await db.delete(liveSessionCommandsTable).where(eq(liveSessionCommandsTable.eventId, params.eventId));
-  await db.delete(liveSessionsTable).where(eq(liveSessionsTable.eventId, params.eventId));
-  await db.delete(eventsTable).where(eq(eventsTable.id, params.eventId));
+  await db.transaction(async (tx) => {
+    await tx.delete(displayAccessTable).where(eq(displayAccessTable.eventId, params.eventId));
+    await tx.delete(agendaItemsTable).where(eq(agendaItemsTable.eventId, params.eventId));
+    await tx.delete(displaysTable).where(eq(displaysTable.eventId, params.eventId));
+    await tx.delete(liveSessionCommandsTable).where(eq(liveSessionCommandsTable.eventId, params.eventId));
+    await tx.delete(liveSessionsTable).where(eq(liveSessionsTable.eventId, params.eventId));
+    await tx.delete(eventsTable).where(eq(eventsTable.id, params.eventId));
+  });
   return res.status(204).send();
 });
 
@@ -815,18 +854,29 @@ router.post("/events/:eventId/session", async (req, res) => {
 router.post("/events/:eventId/messages", async (req, res) => {
   const params = SendOperatorMessageParams.parse(req.params);
   const body = SendOperatorMessageBody.parse(req.body);
+  const message = body.message.trim();
+  const expiresAt = message && body.expiresInSeconds
+    ? new Date(Date.now() + body.expiresInSeconds * 1000)
+    : null;
   const [session] = await db
     .update(liveSessionsTable)
-    .set({ operatorMessage: body.message, lastCommandAt: new Date(), revision: sql`${liveSessionsTable.revision} + 1` })
+    .set({
+      operatorMessage: message || null,
+      operatorMessageTarget: message ? body.target : null,
+      operatorMessagePriority: message ? body.priority ?? "normal" : null,
+      operatorMessageExpiresAt: expiresAt,
+      lastCommandAt: new Date(),
+      revision: sql`${liveSessionsTable.revision} + 1`,
+    })
     .where(eq(liveSessionsTable.eventId, params.eventId))
     .returning();
   res.json({
     id: id(),
     eventId: params.eventId,
-    message: body.message,
+    message,
     priority: body.priority ?? "normal",
     target: body.target,
-    expiresAt: body.expiresInSeconds ? new Date(Date.now() + body.expiresInSeconds * 1000).toISOString() : null,
+    expiresAt: iso(expiresAt),
   });
   req.log.info({ eventId: params.eventId, target: body.target }, "Sent operator message");
   if (session) void publishRealtime(params.eventId, "message", false);
@@ -988,10 +1038,54 @@ router.post("/team/invitations", async (req, res) => {
   const entitlement = await mayCreate(workspaceId, "members", members.length);
   if (!entitlement.allowed) { res.status(403).json({ error: `${entitlement.plan} allows up to ${entitlement.limit} members.` }); return; }
   const expiresAt = new Date(Date.now() + (body.expiresInDays ?? 7) * 86_400_000);
-  const [invitation] = await db.insert(workspaceInvitationsTable).values({ id: id(), workspaceId, email: body.email.toLowerCase(), role: body.role, tokenHash: createHash("sha256").update(randomBytes(32)).digest("hex"), invitedByUserId: res.locals.userId, expiresAt }).returning();
+  const token = randomBytes(32).toString("base64url");
+  const [invitation] = await db.insert(workspaceInvitationsTable).values({ id: id(), workspaceId, email: body.email.toLowerCase(), role: body.role, tokenHash: hashInvitationToken(token), invitedByUserId: res.locals.userId, expiresAt }).returning();
   await audit(workspaceId, res.locals.userId, "invitation.created", "invitation", invitation.id);
   req.log.info({ workspaceId, invitationId: invitation.id }, "Created workspace invitation");
-  res.status(201).json(CreateInvitationResponse.parse({ ...invitation, expiresAt: invitation.expiresAt.toISOString(), acceptedAt: null, revokedAt: null, createdAt: invitation.createdAt.toISOString() }));
+  res.status(201).json(CreateInvitationResponse.parse({ ...invitation, token, expiresAt: invitation.expiresAt.toISOString(), acceptedAt: null, revokedAt: null, createdAt: invitation.createdAt.toISOString() }));
+});
+
+router.post("/team/invitations/accept", async (req, res) => {
+  const body = AcceptInvitationBody.parse(req.body);
+  const email = await resolveAuthenticatedEmail(req, res.locals.userId);
+  if (!email) {
+    res.status(404).json({ error: "Invitation not found" });
+    return;
+  }
+  const result = await db.transaction(async (tx) => {
+    const [invitation] = await tx.select().from(workspaceInvitationsTable)
+      .where(eq(workspaceInvitationsTable.tokenHash, hashInvitationToken(body.token))).limit(1);
+    if (!canAcceptInvitation(invitation, body.token, email)) return null;
+
+    const acceptedAt = new Date();
+    const [claimed] = await tx.update(workspaceInvitationsTable)
+      .set({ acceptedAt })
+      .where(and(
+        eq(workspaceInvitationsTable.id, invitation.id),
+        isNull(workspaceInvitationsTable.acceptedAt),
+        isNull(workspaceInvitationsTable.revokedAt),
+        gt(workspaceInvitationsTable.expiresAt, acceptedAt),
+      ))
+      .returning();
+    if (!claimed) return null;
+    const [member] = await tx.insert(workspaceMembersTable).values({
+      id: id(), workspaceId: invitation.workspaceId, userId: res.locals.userId, role: invitation.role,
+    }).onConflictDoUpdate({
+      target: [workspaceMembersTable.workspaceId, workspaceMembersTable.userId],
+      set: { role: invitation.role },
+    }).returning();
+    await tx.insert(auditLogsTable).values({
+      id: id(), workspaceId: invitation.workspaceId, actorUserId: res.locals.userId,
+      action: "invitation.accepted", entityType: "invitation", entityId: invitation.id, metadata: {},
+    });
+    return { workspaceId: invitation.workspaceId, role: member.role, acceptedAt };
+  });
+  if (!result) {
+    res.status(404).json({ error: "Invitation not found" });
+    return;
+  }
+  req.log.info({ workspaceId: result.workspaceId }, "Accepted workspace invitation");
+  res.json(AcceptInvitationResponse.parse({ ...result, acceptedAt: result.acceptedAt.toISOString() }));
 });
 
 router.post("/team/invitations/:invitationId/revoke", async (req, res) => {

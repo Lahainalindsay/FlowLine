@@ -1,1 +1,2 @@
 - [Stripe proxy-only billing](stripe-proxy-billing.md) — use connector-native Stripe access and canonical event retrieval when raw credentials are intentionally unavailable.
+- [Clerk invitation testing](clerk-invitation-testing.md) — test identities need an explicit email session claim; production email binding resolves through Clerk server-side.

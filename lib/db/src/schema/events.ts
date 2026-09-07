@@ -67,6 +67,9 @@ export const liveSessionsTable = pgTable("flowline_live_sessions", {
   startedAt: timestamp("started_at", { withTimezone: true }),
   pausedAt: timestamp("paused_at", { withTimezone: true }),
   operatorMessage: text("operator_message"),
+  operatorMessageTarget: text("operator_message_target"),
+  operatorMessagePriority: text("operator_message_priority"),
+  operatorMessageExpiresAt: timestamp("operator_message_expires_at", { withTimezone: true }),
   activeCue: text("active_cue"),
   lastCommandAt: timestamp("last_command_at", { withTimezone: true }).notNull().defaultNow(),
   // The counters are a snapshot at this anchor. They are never incremented by

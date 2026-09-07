@@ -33,7 +33,8 @@ export interface Event {
   status: EventStatus;
   segmentCount: number;
   totalPlannedMinutes: number;
-  behindScheduleMinutes?: number;
+  /** @nullable */
+  behindScheduleMinutes?: number | null;
   /** @nullable */
   projectedFinish?: string | null;
   createdAt: string;
@@ -68,6 +69,16 @@ export interface EventUpdate {
   timezone?: string;
   status?: EventUpdateStatus;
 }
+
+export type EventDetailAccessRole = typeof EventDetailAccessRole[keyof typeof EventDetailAccessRole];
+
+
+export const EventDetailAccessRole = {
+  OWNER: 'OWNER',
+  ADMIN: 'ADMIN',
+  OPERATOR: 'OPERATOR',
+  VIEWER: 'VIEWER',
+} as const;
 
 export type AgendaItemType = typeof AgendaItemType[keyof typeof AgendaItemType];
 
@@ -181,6 +192,7 @@ export interface LiveSession {
 }
 
 export type EventDetail = Event & {
+  accessRole: EventDetailAccessRole;
   agenda: AgendaItem[];
   displays: Display[];
   session: LiveSession;
@@ -429,7 +441,6 @@ export const OperatorMessageInputPriority = {
 } as const;
 
 export interface OperatorMessageInput {
-  /** @minLength 1 */
   message: string;
   priority?: OperatorMessageInputPriority;
   target: string;
@@ -595,6 +606,11 @@ export interface Invitation {
   createdAt: string;
 }
 
+export type InvitationCreated = Invitation & {
+  /** Secret invitation token shown only when the invitation is created */
+  token: string;
+};
+
 export type InvitationInputRole = typeof InvitationInputRole[keyof typeof InvitationInputRole];
 
 
@@ -612,6 +628,29 @@ export interface InvitationInput {
      * @maximum 30
      */
   expiresInDays?: number;
+}
+
+export interface InvitationAcceptanceInput {
+  /**
+     * @minLength 32
+     * @maxLength 256
+     */
+  token: string;
+}
+
+export type InvitationAcceptanceRole = typeof InvitationAcceptanceRole[keyof typeof InvitationAcceptanceRole];
+
+
+export const InvitationAcceptanceRole = {
+  ADMIN: 'ADMIN',
+  OPERATOR: 'OPERATOR',
+  VIEWER: 'VIEWER',
+} as const;
+
+export interface InvitationAcceptance {
+  workspaceId: string;
+  role: InvitationAcceptanceRole;
+  acceptedAt: string;
 }
 
 export interface AuditLog {

@@ -34,7 +34,7 @@ export const GetDashboardSummaryResponse = zod.object({
   "status": zod.enum(['draft', 'scheduled', 'live', 'completed']),
   "segmentCount": zod.int(),
   "totalPlannedMinutes": zod.int(),
-  "behindScheduleMinutes": zod.int().optional(),
+  "behindScheduleMinutes": zod.int().nullish(),
   "projectedFinish": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
@@ -48,11 +48,12 @@ export const GetDashboardSummaryResponse = zod.object({
   "status": zod.enum(['draft', 'scheduled', 'live', 'completed']),
   "segmentCount": zod.int(),
   "totalPlannedMinutes": zod.int(),
-  "behindScheduleMinutes": zod.int().optional(),
+  "behindScheduleMinutes": zod.int().nullish(),
   "projectedFinish": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 }).and(zod.object({
+  "accessRole": zod.enum(['OWNER', 'ADMIN', 'OPERATOR', 'VIEWER']),
   "agenda": zod.array(zod.object({
   "id": zod.string(),
   "eventId": zod.string(),
@@ -116,7 +117,7 @@ export const ListEventsResponseItem = zod.object({
   "status": zod.enum(['draft', 'scheduled', 'live', 'completed']),
   "segmentCount": zod.int(),
   "totalPlannedMinutes": zod.int(),
-  "behindScheduleMinutes": zod.int().optional(),
+  "behindScheduleMinutes": zod.int().nullish(),
   "projectedFinish": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
@@ -146,7 +147,7 @@ export const CreateEventResponse = zod.object({
   "status": zod.enum(['draft', 'scheduled', 'live', 'completed']),
   "segmentCount": zod.int(),
   "totalPlannedMinutes": zod.int(),
-  "behindScheduleMinutes": zod.int().optional(),
+  "behindScheduleMinutes": zod.int().nullish(),
   "projectedFinish": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
@@ -173,11 +174,12 @@ export const GetEventResponse = zod.object({
   "status": zod.enum(['draft', 'scheduled', 'live', 'completed']),
   "segmentCount": zod.int(),
   "totalPlannedMinutes": zod.int(),
-  "behindScheduleMinutes": zod.int().optional(),
+  "behindScheduleMinutes": zod.int().nullish(),
   "projectedFinish": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
 }).and(zod.object({
+  "accessRole": zod.enum(['OWNER', 'ADMIN', 'OPERATOR', 'VIEWER']),
   "agenda": zod.array(zod.object({
   "id": zod.string(),
   "eventId": zod.string(),
@@ -247,7 +249,7 @@ export const UpdateEventResponse = zod.object({
   "status": zod.enum(['draft', 'scheduled', 'live', 'completed']),
   "segmentCount": zod.int(),
   "totalPlannedMinutes": zod.int(),
-  "behindScheduleMinutes": zod.int().optional(),
+  "behindScheduleMinutes": zod.int().nullish(),
   "projectedFinish": zod.string().nullish(),
   "createdAt": zod.string(),
   "updatedAt": zod.string()
@@ -630,9 +632,8 @@ export const SendOperatorMessageParams = zod.object({
 
 
 
-
 export const SendOperatorMessageBody = zod.object({
-  "message": zod.string().min(1),
+  "message": zod.string(),
   "priority": zod.enum(['normal', 'urgent']).optional(),
   "target": zod.string(),
   "expiresInSeconds": zod.int().min(1).optional()
@@ -949,6 +950,27 @@ export const CreateInvitationResponse = zod.object({
   "revokedAt": zod.string().nullish(),
   "acceptedAt": zod.string().nullish(),
   "createdAt": zod.string()
+}).and(zod.object({
+  "token": zod.string().describe('Secret invitation token shown only when the invitation is created')
+}))
+
+
+/**
+ * @summary Accept an invitation for the authenticated email address
+ */
+export const acceptInvitationBodyTokenMin = 32;
+export const acceptInvitationBodyTokenMax = 256;
+
+
+
+export const AcceptInvitationBody = zod.object({
+  "token": zod.string().min(acceptInvitationBodyTokenMin).max(acceptInvitationBodyTokenMax)
+})
+
+export const AcceptInvitationResponse = zod.object({
+  "workspaceId": zod.string(),
+  "role": zod.enum(['ADMIN', 'OPERATOR', 'VIEWER']),
+  "acceptedAt": zod.string()
 })
 
 

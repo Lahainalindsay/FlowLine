@@ -40,12 +40,16 @@ import type {
   DisplayCodeInput,
   DisplayInput,
   DisplayToken,
+  ErrorResponse,
   Event,
   EventDetail,
   EventInput,
   EventUpdate,
   HealthStatus,
   Invitation,
+  InvitationAcceptance,
+  InvitationAcceptanceInput,
+  InvitationCreated,
   InvitationInput,
   LiveSession,
   LiveSessionConflict,
@@ -1732,7 +1736,7 @@ export const resolveDisplayCode = async (displayCodeInput: DisplayCodeInput, opt
 
 
 
-export const getResolveDisplayCodeMutationOptions = <TError = ErrorType<unknown>,
+export const getResolveDisplayCodeMutationOptions = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveDisplayCode>>, TError,{data: BodyType<DisplayCodeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
 ): UseMutationOptions<Awaited<ReturnType<typeof resolveDisplayCode>>, TError,{data: BodyType<DisplayCodeInput>}, TContext> => {
 
@@ -1761,12 +1765,12 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
     export type ResolveDisplayCodeMutationResult = NonNullable<Awaited<ReturnType<typeof resolveDisplayCode>>>
     export type ResolveDisplayCodeMutationBody = BodyType<DisplayCodeInput>
-    export type ResolveDisplayCodeMutationError = ErrorType<unknown>
+    export type ResolveDisplayCodeMutationError = ErrorType<ErrorResponse>
 
     /**
  * @summary Exchange a guest code for a display token
  */
-export const useResolveDisplayCode = <TError = ErrorType<unknown>,
+export const useResolveDisplayCode = <TError = ErrorType<ErrorResponse>,
     TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof resolveDisplayCode>>, TError,{data: BodyType<DisplayCodeInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
  ): UseMutationResult<
         Awaited<ReturnType<typeof resolveDisplayCode>>,
@@ -2530,9 +2534,9 @@ export const getCreateInvitationUrl = () => {
 /**
  * @summary Create a workspace invitation
  */
-export const createInvitation = async (invitationInput: InvitationInput, options?: Parameters<typeof customFetch>[1]): Promise<Invitation> => {
+export const createInvitation = async (invitationInput: InvitationInput, options?: Parameters<typeof customFetch>[1]): Promise<InvitationCreated> => {
 
-  return customFetch<Invitation>(getCreateInvitationUrl(),
+  return customFetch<InvitationCreated>(getCreateInvitationUrl(),
   {
     ...options,
     method: 'POST',
@@ -2588,6 +2592,77 @@ export const useCreateInvitation = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getCreateInvitationMutationOptions(options));
+    }
+
+export const getAcceptInvitationUrl = () => {
+
+
+
+
+  return `/api/team/invitations/accept`
+}
+
+/**
+ * @summary Accept an invitation for the authenticated email address
+ */
+export const acceptInvitation = async (invitationAcceptanceInput: InvitationAcceptanceInput, options?: Parameters<typeof customFetch>[1]): Promise<InvitationAcceptance> => {
+
+  return customFetch<InvitationAcceptance>(getAcceptInvitationUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(invitationAcceptanceInput)
+  }
+);}
+
+
+
+
+
+export const getAcceptInvitationMutationOptions = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptInvitation>>, TError,{data: BodyType<InvitationAcceptanceInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof acceptInvitation>>, TError,{data: BodyType<InvitationAcceptanceInput>}, TContext> => {
+
+const mutationKey = ['acceptInvitation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof acceptInvitation>>, {data: BodyType<InvitationAcceptanceInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  acceptInvitation(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AcceptInvitationMutationResult = NonNullable<Awaited<ReturnType<typeof acceptInvitation>>>
+    export type AcceptInvitationMutationBody = BodyType<InvitationAcceptanceInput>
+    export type AcceptInvitationMutationError = ErrorType<NotFoundResponse>
+
+    /**
+ * @summary Accept an invitation for the authenticated email address
+ */
+export const useAcceptInvitation = <TError = ErrorType<NotFoundResponse>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof acceptInvitation>>, TError,{data: BodyType<InvitationAcceptanceInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof acceptInvitation>>,
+        TError,
+        {data: BodyType<InvitationAcceptanceInput>},
+        TContext
+      > => {
+      return useMutation(getAcceptInvitationMutationOptions(options));
     }
 
 export const getRevokeInvitationUrl = (invitationId: string,) => {

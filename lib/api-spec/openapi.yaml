@@ -399,6 +399,14 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/DisplayToken"
+        "429":
+          description: Too many display-code attempts
+          headers:
+            Retry-After:
+              schema: { type: integer }
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorResponse" }
   /display-access/{token}:
     parameters:
       - name: token
@@ -493,7 +501,16 @@ paths:
       summary: Create a workspace invitation
       requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/InvitationInput" } } } }
       responses:
-        "201": { description: Created invitation, content: { application/json: { schema: { $ref: "#/components/schemas/Invitation" } } } }
+        "201": { description: Created invitation, content: { application/json: { schema: { $ref: "#/components/schemas/InvitationCreated" } } } }
+  /team/invitations/accept:
+    post:
+      operationId: acceptInvitation
+      tags: [workspace]
+      summary: Accept an invitation for the authenticated email address
+      requestBody: { required: true, content: { application/json: { schema: { $ref: "#/components/schemas/InvitationAcceptanceInput" } } } }
+      responses:
+        "200": { description: Accepted invitation, content: { application/json: { schema: { $ref: "#/components/schemas/InvitationAcceptance" } } } }
+        "404": { $ref: "#/components/responses/NotFound" }
   /team/invitations/{invitationId}/revoke:
     parameters: [ { $ref: "#/components/parameters/InvitationId" } ]
     post:
@@ -607,7 +624,7 @@ components:
         status: { type: string, enum: [draft, scheduled, live, completed] }
         segmentCount: { type: integer }
         totalPlannedMinutes: { type: integer }
-        behindScheduleMinutes: { type: integer }
+        behindScheduleMinutes: { type: ["integer", "null"] }
         projectedFinish: { type: ["string", "null"] }
         createdAt: { type: string }
         updatedAt: { type: string }
@@ -631,8 +648,9 @@ components:
       allOf:
         - $ref: "#/components/schemas/Event"
         - type: object
-          required: [agenda, displays, session]
+          required: [accessRole, agenda, displays, session]
           properties:
+            accessRole: { type: string, enum: [OWNER, ADMIN, OPERATOR, VIEWER] }
             agenda:
               type: array
               items: { $ref: "#/components/schemas/AgendaItem" }
@@ -823,7 +841,7 @@ components:
       type: object
       required: [message, target]
       properties:
-        message: { type: string, minLength: 1 }
+        message: { type: string }
         priority: { type: string, enum: [normal, urgent] }
         target: { type: string }
         expiresInSeconds: { type: integer, minimum: 1 }
@@ -932,6 +950,13 @@ components:
         revokedAt: { type: ["string", "null"] }
         acceptedAt: { type: ["string", "null"] }
         createdAt: { type: string }
+    InvitationCreated:
+      allOf:
+        - $ref: "#/components/schemas/Invitation"
+        - type: object
+          required: [token]
+          properties:
+            token: { type: string, description: Secret invitation token shown only when the invitation is created }
     InvitationInput:
       type: object
       required: [email, role]
@@ -939,6 +964,18 @@ components:
         email: { type: string, format: email }
         role: { type: string, enum: [ADMIN, OPERATOR, VIEWER] }
         expiresInDays: { type: integer, minimum: 1, maximum: 30 }
+    InvitationAcceptanceInput:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string, minLength: 32, maxLength: 256 }
+    InvitationAcceptance:
+      type: object
+      required: [workspaceId, role, acceptedAt]
+      properties:
+        workspaceId: { type: string }
+        role: { type: string, enum: [ADMIN, OPERATOR, VIEWER] }
+        acceptedAt: { type: string }
     AuditLog:
       type: object
       required: [id, action, entityType, createdAt]

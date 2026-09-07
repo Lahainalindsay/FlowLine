@@ -8,7 +8,6 @@
 import type { OperatorMessageInputPriority } from './operatorMessageInputPriority';
 
 export interface OperatorMessageInput {
-  /** @minLength 1 */
   message: string;
   priority?: OperatorMessageInputPriority;
   target: string;

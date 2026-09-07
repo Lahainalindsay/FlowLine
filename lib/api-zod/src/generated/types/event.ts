@@ -17,7 +17,8 @@ export interface Event {
   status: EventStatus;
   segmentCount: number;
   totalPlannedMinutes: number;
-  behindScheduleMinutes?: number;
+  /** @nullable */
+  behindScheduleMinutes?: number | null;
   /** @nullable */
   projectedFinish?: string | null;
   createdAt: string;

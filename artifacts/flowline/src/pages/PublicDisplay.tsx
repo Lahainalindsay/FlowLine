@@ -9,7 +9,7 @@ import {
   useGetLiveSession, getGetLiveSessionQueryKey,
   PublicDisplayState, EventDetail
 } from '@workspace/api-client-react';
-import { formatTimer, cn } from '../lib/utils';
+import { formatTimer, cn, projectSessionTiming } from '../lib/utils';
 import { Loader2, TriangleAlert, Monitor, ArrowRight } from 'lucide-react';
 import { Button, Input } from '../components/ui';
 import { StageTimeLogo } from '../components/layout';
@@ -17,6 +17,7 @@ import { StageTimeLogo } from '../components/layout';
 export default function PublicDisplay() {
   const { displayId = '' } = useParams<{ displayId: string }>();
   const [, setLocation] = useLocation();
+  const basePath = import.meta.env.BASE_URL.replace(/\/$/, '');
 
   const searchString = window.location.search;
   const urlParams = new URLSearchParams(searchString);
@@ -29,7 +30,7 @@ export default function PublicDisplay() {
       sessionStorage.setItem(`display_token_${displayId}`, queryToken);
       setToken(queryToken);
       // Strip token from URL cleanly
-      window.history.replaceState({}, '', `/display/${displayId}`);
+      window.history.replaceState({}, '', `${basePath}/display/${displayId}`);
     } else {
       const storedToken = sessionStorage.getItem(`display_token_${displayId}`);
       if (storedToken) {
@@ -38,7 +39,7 @@ export default function PublicDisplay() {
         setLocation(`/display/${displayId}/pair`);
       }
     }
-  }, [queryToken, displayId, setLocation]);
+  }, [basePath, queryToken, displayId, setLocation]);
 
   if (!token) {
     return null;
@@ -109,11 +110,12 @@ export function DisplayHost({ token, preview, eventId, displayId }: { token?: st
   if (preview) {
     return <PreviewDisplayHost eventId={eventId!} displayId={displayId!} />;
   }
-  return <TokenDisplayHost token={token!} />;
+  return <TokenDisplayHost token={token!} displayId={displayId} />;
 }
 
-function TokenDisplayHost({ token }: { token: string }) {
+function TokenDisplayHost({ token, displayId }: { token: string; displayId?: string }) {
   const queryClient = useQueryClient();
+  const [, setLocation] = useLocation();
   const revision = useRef(-1);
   const [streamState, setStreamState] = useState<'CONNECTED' | 'RECONNECTING' | 'OFFLINE'>('OFFLINE');
 
@@ -127,7 +129,8 @@ function TokenDisplayHost({ token }: { token: string }) {
     let opened = false;
     const stream = new EventSource(`/api/display-access/${encodeURIComponent(token)}/stream`);
     const apply = (event: MessageEvent) => {
-      const payload = JSON.parse(event.data);
+      let payload: any;
+      try { payload = JSON.parse(event.data); } catch { return; }
       if (!payload?.state || payload.revision <= revision.current) return;
       revision.current = payload.revision;
       queryClient.setQueryData(getGetPublicDisplayStateQueryKey(token), payload.state);
@@ -143,7 +146,15 @@ function TokenDisplayHost({ token }: { token: string }) {
   }, [token, queryClient]);
 
   if (q.isLoading) return <LoadingView />;
-  if (q.isError || !q.data) return <ErrorView />;
+  if (q.isError || !q.data) {
+    return <ErrorView
+      onRetry={() => q.refetch()}
+      onPair={() => {
+        if (displayId) sessionStorage.removeItem(`display_token_${displayId}`);
+        setLocation(`/display/${displayId}/pair`);
+      }}
+    />;
+  }
 
   return <DisplayUI state={q.data} streamState={streamState} />;
 }
@@ -157,7 +168,7 @@ function PreviewDisplayHost({ eventId, displayId }: { eventId: string; displayId
   const error = pq.isError || sq.isError || aq.isError;
 
   if (loading) return <LoadingView />;
-  if (error || !pq.data || !aq.data || !sq.data) return <ErrorView />;
+  if (error || !pq.data || !aq.data || !sq.data) return <ErrorView onRetry={() => { pq.refetch(); aq.refetch(); sq.refetch(); }} />;
 
   const state: PublicDisplayState = {
     event: pq.data,
@@ -173,32 +184,40 @@ function LoadingView() {
   return <div className="flex min-h-[100dvh] items-center justify-center bg-black text-cyan-500/50"><Loader2 className="h-12 w-12 animate-spin" /></div>;
 }
 
-function ErrorView() {
-  return <div className="flex min-h-[100dvh] items-center justify-center bg-black text-red-500"><TriangleAlert className="h-12 w-12" /></div>;
+function ErrorView({ onRetry, onPair }: { onRetry?: () => void; onPair?: () => void }) {
+  return (
+    <div className="flex min-h-[100dvh] items-center justify-center bg-black px-6 text-center">
+      <div className="max-w-sm">
+        <TriangleAlert className="mx-auto h-12 w-12 text-red-400" />
+        <h1 className="mt-5 text-xl font-bold text-white">Display unavailable</h1>
+        <p className="mt-2 text-sm text-slate-400">We could not load this display. Check the connection or pair this screen again.</p>
+        <div className="mt-6 flex justify-center gap-3">
+          {onRetry && <Button variant="outline" onClick={onRetry}>Retry</Button>}
+          {onPair && <Button variant="primary" onClick={onPair}>Back to pair</Button>}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function DisplayUI({ state, streamState }: { state: PublicDisplayState, streamState?: string }) {
-  const [localSeconds, setLocalSeconds] = useState(state.session.remainingSeconds);
+  const [timing, setTiming] = useState(() => projectSessionTiming(state.session));
 
   useEffect(() => {
-    setLocalSeconds(state.session.remainingSeconds);
     const receivedAt = Date.now();
-    const sync = () => {
-      if (state.session.state !== 'running' && state.session.state !== 'overtime') {
-        return setLocalSeconds(state.session.remainingSeconds);
-      }
-      const serverNow = new Date(state.session.serverTime).getTime() + (Date.now() - receivedAt);
-      setLocalSeconds(state.session.remainingSeconds - Math.floor((serverNow - new Date(state.session.timerAnchorAt).getTime()) / 1000));
-    };
+    const sync = () => setTiming(projectSessionTiming(state.session, Date.now(), receivedAt));
     sync();
     const id = window.setInterval(sync, 250);
     return () => window.clearInterval(id);
-  }, [state.session.remainingSeconds, state.session.state, state.session.serverTime, state.session.timerAnchorAt]);
+  }, [state.session.remainingSeconds, state.session.elapsedSeconds, state.session.state, state.session.timerAnchorAt, state.session.serverTime]);
 
   const active = state.agenda.find(i => i.id === state.session.activeItemId) ?? state.agenda.find(i => i.status === 'active');
   const next = state.agenda.find(i => i.status === 'queued' && i.id !== active?.id);
 
-  const overtime = localSeconds < 0;
+  const overtime = timing.remainingSeconds < 0;
+  const layout = `${state.display?.kind ?? ''} ${state.display?.assignedLayout ?? ''}`.toLowerCase();
+  const speakerLayout = layout.includes('speaker');
+  const backstageLayout = layout.includes('backstage');
 
   return (
     <div className={cn('noise flex min-h-[100dvh] flex-col justify-center px-10 py-10 transition-colors duration-1000 overflow-hidden relative', overtime ? 'bg-[#2a0f0d]' : 'bg-[#06090e]')}>
@@ -225,8 +244,9 @@ function DisplayUI({ state, streamState }: { state: PublicDisplayState, streamSt
           'timer-text text-[clamp(10rem,30vw,35rem)] font-medium leading-[0.8] drop-shadow-2xl transition-colors duration-500',
           overtime ? 'text-[#FF4040]' : state.session.state === 'running' ? 'text-[#00FF9D]' : 'text-slate-600'
         )}>
-          {formatTimer(localSeconds)}
+          {formatTimer(timing.remainingSeconds)}
         </div>
+        <div className="mt-8 mono text-lg uppercase tracking-[0.18em] text-slate-500">Elapsed {formatTimer(timing.elapsedSeconds)}</div>
 
         {state.session.state === 'running' && !overtime && (
           <div className="mx-auto mt-16 w-3/4 max-w-4xl h-3 bg-white/5 rounded-full overflow-hidden">
@@ -234,7 +254,7 @@ function DisplayUI({ state, streamState }: { state: PublicDisplayState, streamSt
           </div>
         )}
 
-        {active?.speaker && (
+        {!speakerLayout && active?.speaker && (
           <div className="mt-16 text-5xl md:text-7xl font-bold tracking-tight text-white drop-shadow-lg">
             {active.speaker}
           </div>
@@ -251,10 +271,18 @@ function DisplayUI({ state, streamState }: { state: PublicDisplayState, streamSt
         </div>
       )}
 
-      {!state.session.operatorMessage && next && (
+      {!state.session.operatorMessage && next && !speakerLayout && (
         <div className="mx-auto mt-auto flex items-center justify-between w-full max-w-5xl rounded-2xl border border-white/10 glass-panel px-12 py-8 z-20">
           <div className="text-3xl font-bold text-slate-300">Up Next: {next.title}</div>
           <div className="mono text-3xl font-bold text-cyan-400">{next.plannedDurationMinutes}m</div>
+        </div>
+      )}
+      {backstageLayout && (
+        <div className="mx-auto mt-auto w-full max-w-5xl rounded-2xl border border-white/10 glass-panel px-10 py-6 z-20">
+          <div className="text-sm font-bold uppercase tracking-widest text-slate-500">Rundown</div>
+          <div className="mt-3 grid gap-2 md:grid-cols-3 text-lg text-slate-300">
+            {state.agenda.slice(0, 3).map(item => <div key={item.id} className={cn('truncate', item.id === active?.id && 'font-bold text-cyan-400')}>{item.title}</div>)}
+          </div>
         </div>
       )}
     </div>

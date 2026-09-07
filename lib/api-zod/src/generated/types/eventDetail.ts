@@ -8,9 +8,11 @@
 import type { AgendaItem } from './agendaItem';
 import type { Display } from './display';
 import type { Event } from './event';
+import type { EventDetailAccessRole } from './eventDetailAccessRole';
 import type { LiveSession } from './liveSession';
 
 export type EventDetail = Event & {
+  accessRole: EventDetailAccessRole;
   agenda: AgendaItem[];
   displays: Display[];
   session: LiveSession;
